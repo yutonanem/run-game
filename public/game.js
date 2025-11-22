@@ -1,4 +1,7 @@
-// ====== 基本の要素取得 ======
+// ====== 暇つぶしランゲーム game.js ======
+"use strict";
+
+// キャンバスとUI要素
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
@@ -7,7 +10,7 @@ const bestTimeEl = document.getElementById("best-time");
 const messageEl = document.getElementById("message");
 const restartBtn = document.getElementById("restart-btn");
 
-// ====== サイズ調整（レスポンシブ） ======
+// ----- キャンバスのサイズ調整 -----
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width;
@@ -16,9 +19,25 @@ function resizeCanvas() {
 resizeCanvas();
 window.addEventListener("resize", resizeCanvas);
 
-// ====== ゲーム用変数 ======
+// ----- 共通のランダム関数 -----
+function randRange(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+// ====== 地面の Y 座標 ======
+// ※ この値を変更すると、プレイ画面（上の空部分・下の地面の位置）が変わります
+function getGroundY() {
+  const marginFromBottom = 10; 
+  // ← 画面下から地面までの距離(px)
+  //    この数字を小さくするほど地面が下に移動し、空が広くなる！
+
+  return canvas.height - marginFromBottom;
+}
+
+// ====== ゲーム状態用の変数 ======
 let player;
 let obstacles = [];
+
 let gameStarted = false;
 let gameOver = false;
 
@@ -26,59 +45,61 @@ let startTime = 0;
 let currentTime = 0;
 let bestTime = parseFloat(localStorage.getItem("bestTime_runGame") || "0");
 
-// ランダムな出現テンポ用
 let spawnTimer = 0;
-let nextSpawnInterval = 0; // ms 単位
+let nextSpawnInterval = 0;
 
-// 地面の高さ（キャンバス内のY位置）
-function getGroundY() {
-  return canvas.height - 40; // ちょっと余白
-}
-
-// ランダム関数
-function randRange(min, max) {
-  return Math.random() * (max - min) + min;
-}
-
-function randInt(min, max) {
-  return Math.floor(randRange(min, max));
-}
+let difficulty = 1;
 
 // ====== プレイヤー初期化 ======
 function initPlayer() {
-  const size = Math.min(canvas.width, canvas.height) * 0.06; // 画面に対しての割合
+  // プレイヤーのサイズ（大きめ）
+  const size = Math.min(canvas.width, canvas.height) * 0.225;
+
   player = {
     x: canvas.width * 0.2,
     y: getGroundY() - size,
     width: size,
     height: size,
     vy: 0,
-    gravity: 1600, // 重力（大きいほど早く落ちる）
-    jumpPower: -650,
+    gravity: 1600,
+
+    // ★ ジャンプ力（高さ維持）
+    jumpPower: -600,
+
+    // ★ 二段ジャンプ設定
+    maxJumps: 2,
+    jumpCount: 0,
     onGround: true
   };
 }
 
-// ====== 障害物生成（ランダムサイズ＋ランダム間隔） ======
+// ====== 障害物生成 ======
 function resetSpawnTimer() {
-  // 障害物が来る間隔（ミリ秒）
-  // → 1500〜2600ms の間でランダム（前よりゆっくり目）
-  nextSpawnInterval = randRange(1500, 2600);
+  // 出現間隔（増量）
+  nextSpawnInterval = randRange(700, 1300);
   spawnTimer = 0;
 }
 
 function spawnObstacle() {
-  // プレイヤーサイズを基準に、ランダムな幅＆高さ
   const baseSize = player.height;
 
-  const width = randRange(baseSize * 0.7, baseSize * 1.4);   // 幅：ちょい小さい〜大きめ
-  const height = randRange(baseSize * 0.9, baseSize * 1.8);  // 高さ：低い段差〜高い壁
+  // 元サイズ
+  const rawWidth = randRange(baseSize * 0.7, baseSize * 1.4);
+  const rawHeight = randRange(baseSize * 0.9, baseSize * 1.8);
 
-  const speed = randRange(260, 360); // 左に流れるスピード（少しだけランダム）
+  // ★ 4/5 サイズに縮小
+  const width = rawWidth * 0.8;
+  const height = rawHeight * 0.8;
+
+  // ★ 上端は rawHeight のまま → 下だけ浮く
+  const topY = getGroundY() - rawHeight;
+
+  const baseSpeed = randRange(260, 360);
+  const speed = baseSpeed * difficulty;
 
   obstacles.push({
     x: canvas.width + 20,
-    y: getGroundY() - height,
+    y: topY,
     width,
     height,
     speed
@@ -87,17 +108,20 @@ function spawnObstacle() {
   resetSpawnTimer();
 }
 
-// ====== ゲーム初期化 ======
+// ====== ゲームリセット ======
 function resetGame() {
   resizeCanvas();
   initPlayer();
   obstacles = [];
+
   gameStarted = false;
   gameOver = false;
   currentTime = 0;
-  startTime = 0;
+
   spawnTimer = 0;
   resetSpawnTimer();
+
+  difficulty = 1;
 
   currentTimeEl.textContent = "0.00";
   bestTimeEl.textContent = bestTime.toFixed(2);
@@ -106,10 +130,9 @@ function resetGame() {
 
 resetGame();
 
-// ====== 入力処理（スペース＆タップ） ======
+// ====== 入力処理（二段ジャンプ対応版） ======
 function handleJump() {
   if (!gameStarted) {
-    // スタート処理
     gameStarted = true;
     startTime = performance.now();
     messageEl.textContent = "";
@@ -117,12 +140,15 @@ function handleJump() {
 
   if (gameOver) return;
 
-  if (player.onGround) {
+  // ★ 二段ジャンプOK
+  if (player.jumpCount < player.maxJumps) {
     player.vy = player.jumpPower;
     player.onGround = false;
+    player.jumpCount += 1;
   }
 }
 
+// キーボード
 window.addEventListener("keydown", (e) => {
   if (e.code === "Space") {
     e.preventDefault();
@@ -130,46 +156,54 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+// タップ
 canvas.addEventListener("pointerdown", (e) => {
   e.preventDefault();
   handleJump();
 });
 
-// ====== ゲームループ ======
+// ====== メインループ ======
 let lastTime = 0;
 
 function update(delta) {
   if (!gameStarted || gameOver) return;
 
-  // 時間更新
   const now = performance.now();
   currentTime = (now - startTime) / 1000;
   currentTimeEl.textContent = currentTime.toFixed(2);
 
-  // プレイヤーの物理
+  // ★ 経過時間で障害物スピードが上昇
+  difficulty = 1 + currentTime * 0.03;
+
+  // プレイヤー物理
   player.vy += player.gravity * delta;
   player.y += player.vy * delta;
 
   const groundY = getGroundY() - player.height;
 
+  // ★ 着地判定（ジャンプ回数リセット）
   if (player.y >= groundY) {
     player.y = groundY;
     player.vy = 0;
-    player.onGround = true;
+
+    if (!player.onGround) {
+      player.onGround = true;
+      player.jumpCount = 0; // ← 二段ジャンプリセット
+    }
   }
 
-  // 障害物の生成タイミング（ランダム）
-  spawnTimer += delta * 1000; // ms に変換
+  // 障害物生成
+  spawnTimer += delta * 1000;
   if (spawnTimer >= nextSpawnInterval) {
     spawnObstacle();
   }
 
-  // 障害物の移動
+  // 障害物移動
   obstacles.forEach((obs) => {
     obs.x -= obs.speed * delta;
   });
 
-  // 画面外を削除
+  // 画面外削除
   obstacles = obstacles.filter((obs) => obs.x + obs.width > 0);
 
   // 当たり判定
@@ -180,7 +214,6 @@ function update(delta) {
       player.y < obs.y + obs.height &&
       player.y + player.height > obs.y
     ) {
-      // 衝突！
       endGame();
       break;
     }
@@ -195,7 +228,7 @@ function draw() {
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 地面線
+  // 地面
   ctx.strokeStyle = "#666";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -203,11 +236,11 @@ function draw() {
   ctx.lineTo(canvas.width, getGroundY());
   ctx.stroke();
 
-  // プレイヤー（四角）
-  ctx.fillStyle = "#333";
+  // プレイヤー（黄色）
+  ctx.fillStyle = "#ffd400";
   ctx.fillRect(player.x, player.y, player.width, player.height);
 
-  // 障害物
+  // 障害物（灰色）
   ctx.fillStyle = "#555";
   obstacles.forEach((obs) => {
     ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
@@ -220,13 +253,12 @@ function loop(timestamp) {
 
   update(delta);
   draw();
-
   requestAnimationFrame(loop);
 }
 
 requestAnimationFrame(loop);
 
-// ====== ゲームオーバー処理 ======
+// ====== ゲームオーバー ======
 function endGame() {
   if (gameOver) return;
   gameOver = true;
@@ -240,7 +272,7 @@ function endGame() {
   messageEl.textContent = `ゲームオーバー！ 走行タイム：${currentTime.toFixed(2)} 秒`;
 }
 
-// ====== リスタートボタン ======
+// ====== リスタート ======
 restartBtn.addEventListener("click", () => {
-    resetGame();
+  resetGame();
 });

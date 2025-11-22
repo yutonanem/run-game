@@ -14,14 +14,19 @@
         段差につまずかずに、できるだけ長く走り続けよう🏃‍♀️✨
       </p>
 
-      <canvas id="game"></canvas>
+      <!-- ★ 正しいIDのキャンバス -->
+      <canvas id="gameCanvas"></canvas>
 
+      <!-- HUD（タイム表示） -->
       <div class="hud">
-        <div>今回のタイム：<span id="time">0.00</span> 秒</div>
-        <div>ベストタイム：<span id="best">0.00</span> 秒</div>
+        <div>今回のタイム：<span id="current-time">0.00</span> 秒</div>
+        <div>ベストタイム：<span id="best-time">0.00</span> 秒</div>
       </div>
 
-      <div id="status" class="status"></div>
+      <!-- メッセージ表示 -->
+      <div id="message" class="status"></div>
+
+      <!-- リスタート -->
       <button id="restart-btn" class="restart-btn" hidden>もう一度</button>
     </div>
 
