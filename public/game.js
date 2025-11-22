@@ -1,229 +1,128 @@
-const canvas = document.getElementById("game");
+// ====== 基本の要素取得 ======
+const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-const timeSpan = document.getElementById("time");
-const bestSpan = document.getElementById("best");
-const statusDiv = document.getElementById("status");
+const currentTimeEl = document.getElementById("current-time");
+const bestTimeEl = document.getElementById("best-time");
+const messageEl = document.getElementById("message");
 const restartBtn = document.getElementById("restart-btn");
 
-// === ここがポイント：先に groundY を宣言だけしておく ===
-let groundY;
-
-// キャンバスのサイズを画面に合わせて調整
+// ====== サイズ調整（レスポンシブ） ======
 function resizeCanvas() {
-  const width = Math.min(640, window.innerWidth - 32);
-  const height = Math.round(width * 0.6);
-  canvas.width = width;
-  canvas.height = height;
-  groundY = canvas.height * 0.8; // ← ここで代入してもOKになる
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
 }
-window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
 
-// プレイヤー画像
-const playerImg = new Image();
-// ★あとで public に player.png を置くと、この画像がキャラになる
-playerImg.src = "player.png";
-
-// ゲーム状態
+// ====== ゲーム用変数 ======
 let player;
-let obstacles;
-let lastTime = null;
-let running = false;
+let obstacles = [];
+let gameStarted = false;
 let gameOver = false;
-let deathAnimating = false;
+
 let startTime = 0;
-let elapsed = 0;
-let bestTime =
-  Number(localStorage.getItem("runGameBestTime") || "0") || 0;
+let currentTime = 0;
+let bestTime = parseFloat(localStorage.getItem("bestTime_runGame") || "0");
 
-bestSpan.textContent = bestTime.toFixed(2);
-
-const gravity = 0.6;
-const jumpVelocity = -12;
-const speed = 4; // 横スクロール速度
+// ランダムな出現テンポ用
 let spawnTimer = 0;
-let spawnInterval = 1200; // ms
+let nextSpawnInterval = 0; // ms 単位
 
-function resetGame() {
+// 地面の高さ（キャンバス内のY位置）
+function getGroundY() {
+  return canvas.height - 40; // ちょっと余白
+}
+
+// ランダム関数
+function randRange(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function randInt(min, max) {
+  return Math.floor(randRange(min, max));
+}
+
+// ====== プレイヤー初期化 ======
+function initPlayer() {
+  const size = Math.min(canvas.width, canvas.height) * 0.06; // 画面に対しての割合
   player = {
     x: canvas.width * 0.2,
-    y: groundY - 50,
-    w: 50,
-    h: 50,
+    y: getGroundY() - size,
+    width: size,
+    height: size,
     vy: 0,
-    onGround: true,
-    opacity: 1
+    gravity: 1600, // 重力（大きいほど早く落ちる）
+    jumpPower: -650,
+    onGround: true
   };
-  obstacles = [];
-  lastTime = null;
-  running = false;
-  gameOver = false;
-  deathAnimating = false;
-  elapsed = 0;
-  timeSpan.textContent = "0.00";
-  statusDiv.textContent = "タップ / スペースキーでスタート＆ジャンプ！";
-  restartBtn.hidden = true;
 }
-resetGame();
+
+// ====== 障害物生成（ランダムサイズ＋ランダム間隔） ======
+function resetSpawnTimer() {
+  // 障害物が来る間隔（ミリ秒）
+  // → 1500〜2600ms の間でランダム（前よりゆっくり目）
+  nextSpawnInterval = randRange(1500, 2600);
+  spawnTimer = 0;
+}
 
 function spawnObstacle() {
-  const height = 20 + Math.random() * 40;
-  const width = 20 + Math.random() * 60;
-  const y = groundY - height;
+  // プレイヤーサイズを基準に、ランダムな幅＆高さ
+  const baseSize = player.height;
+
+  const width = randRange(baseSize * 0.7, baseSize * 1.4);   // 幅：ちょい小さい〜大きめ
+  const height = randRange(baseSize * 0.9, baseSize * 1.8);  // 高さ：低い段差〜高い壁
+
+  const speed = randRange(260, 360); // 左に流れるスピード（少しだけランダム）
+
   obstacles.push({
-    x: canvas.width + width,
-    y,
-    w: width,
-    h: height
+    x: canvas.width + 20,
+    y: getGroundY() - height,
+    width,
+    height,
+    speed
   });
+
+  resetSpawnTimer();
 }
 
-function rectsOverlap(a, b) {
-  return !(
-    a.x + a.w < b.x ||
-    a.x > b.x + b.w ||
-    a.y + a.h < b.y ||
-    a.y > b.y + b.h
-  );
+// ====== ゲーム初期化 ======
+function resetGame() {
+  resizeCanvas();
+  initPlayer();
+  obstacles = [];
+  gameStarted = false;
+  gameOver = false;
+  currentTime = 0;
+  startTime = 0;
+  spawnTimer = 0;
+  resetSpawnTimer();
+
+  currentTimeEl.textContent = "0.00";
+  bestTimeEl.textContent = bestTime.toFixed(2);
+  messageEl.textContent = "画面タップ or スペースキーでスタート＆ジャンプ！";
 }
 
-function update(delta) {
-  if (!running && !deathAnimating) return;
+resetGame();
 
-  const deltaSec = delta / 16.67; // 60fps換算
-
-  if (running) {
-    const now = performance.now();
-    elapsed = (now - startTime) / 1000;
-    timeSpan.textContent = elapsed.toFixed(2);
-  }
-
-  // プレイヤー物理
-  if (running || deathAnimating) {
-    if (!player.onGround) {
-      player.vy += gravity * deltaSec;
-      player.y += player.vy * deltaSec;
-      if (player.y + player.h >= groundY) {
-        player.y = groundY - player.h;
-        player.vy = 0;
-        player.onGround = true;
-      }
-    }
-  }
-
-  // 障害物の移動 & 生成（死亡中は停止）
-  if (running) {
-    spawnTimer += delta;
-    if (spawnTimer >= spawnInterval) {
-      spawnTimer = 0;
-      spawnInterval = 900 + Math.random() * 900;
-      spawnObstacle();
-    }
-
-    obstacles.forEach((o) => {
-      o.x -= speed * deltaSec * 10;
-    });
-    obstacles = obstacles.filter((o) => o.x + o.w > -50);
-  }
-
-  // 衝突判定（走行中のみ）
-  if (running) {
-    for (const o of obstacles) {
-      if (rectsOverlap(player, o)) {
-        running = false;
-        deathAnimating = true;
-        statusDiv.textContent = "つまずいちゃった… 引きずられてく〜💦";
-        break;
-      }
-    }
-  }
-
-  // 死亡アニメーション：左に引きずられつつフェードアウト
-  if (deathAnimating) {
-    player.x -= 3 * deltaSec * 10;
-    player.opacity -= 0.02 * deltaSec * 3;
-    if (player.opacity < 0) player.opacity = 0;
-
-    if (player.x + player.w < 0 || player.opacity <= 0.05) {
-      deathAnimating = false;
-      gameOver = true;
-
-      const finalTime = elapsed;
-      if (finalTime > bestTime) {
-        bestTime = finalTime;
-        localStorage.setItem("runGameBestTime", String(bestTime));
-      }
-      bestSpan.textContent = bestTime.toFixed(2);
-      statusDiv.textContent = `ゲームオーバー！走行タイム：${finalTime.toFixed(
-        2
-      )} 秒`;
-      restartBtn.hidden = false;
-    }
-  }
-}
-
-function drawGround() {
-  ctx.strokeStyle = "#555";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, groundY + 0.5);
-  ctx.lineTo(canvas.width, groundY + 0.5);
-  ctx.stroke();
-}
-
-function drawPlayer() {
-  ctx.save();
-  ctx.globalAlpha = player.opacity;
-
-  if (playerImg.complete && playerImg.naturalWidth > 0) {
-    ctx.drawImage(playerImg, player.x, player.y, player.w, player.h);
-  } else {
-    ctx.fillStyle = "#ffcc00";
-    ctx.fillRect(player.x, player.y, player.w, player.h);
-  }
-
-  ctx.restore();
-}
-
-function drawObstacles() {
-  ctx.fillStyle = "#555";
-  obstacles.forEach((o) => {
-    ctx.fillRect(o.x, o.y, o.w, o.h);
-  });
-}
-
-function loop(timestamp) {
-  if (lastTime == null) lastTime = timestamp;
-  const delta = timestamp - lastTime;
-  lastTime = timestamp;
-
-  update(delta);
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawGround();
-  drawObstacles();
-  drawPlayer();
-
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
-
-// 入力（クリック / タップ / スペースキー）
+// ====== 入力処理（スペース＆タップ） ======
 function handleJump() {
-  if (gameOver) return;
-  if (!running && !deathAnimating) {
-    running = true;
+  if (!gameStarted) {
+    // スタート処理
+    gameStarted = true;
     startTime = performance.now();
-    statusDiv.textContent = "走行中！段差に注意して〜！";
+    messageEl.textContent = "";
   }
-  if (player.onGround && !deathAnimating) {
-    player.vy = jumpVelocity;
+
+  if (gameOver) return;
+
+  if (player.onGround) {
+    player.vy = player.jumpPower;
     player.onGround = false;
   }
 }
 
-canvas.addEventListener("click", handleJump);
 window.addEventListener("keydown", (e) => {
   if (e.code === "Space") {
     e.preventDefault();
@@ -231,9 +130,117 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-restartBtn.addEventListener("click", () => {
-  resetGame();
+canvas.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  handleJump();
 });
 
-// 初期メッセージ
-statusDiv.textContent = "タップ / スペースキーでスタート＆ジャンプ！";
+// ====== ゲームループ ======
+let lastTime = 0;
+
+function update(delta) {
+  if (!gameStarted || gameOver) return;
+
+  // 時間更新
+  const now = performance.now();
+  currentTime = (now - startTime) / 1000;
+  currentTimeEl.textContent = currentTime.toFixed(2);
+
+  // プレイヤーの物理
+  player.vy += player.gravity * delta;
+  player.y += player.vy * delta;
+
+  const groundY = getGroundY() - player.height;
+
+  if (player.y >= groundY) {
+    player.y = groundY;
+    player.vy = 0;
+    player.onGround = true;
+  }
+
+  // 障害物の生成タイミング（ランダム）
+  spawnTimer += delta * 1000; // ms に変換
+  if (spawnTimer >= nextSpawnInterval) {
+    spawnObstacle();
+  }
+
+  // 障害物の移動
+  obstacles.forEach((obs) => {
+    obs.x -= obs.speed * delta;
+  });
+
+  // 画面外を削除
+  obstacles = obstacles.filter((obs) => obs.x + obs.width > 0);
+
+  // 当たり判定
+  for (const obs of obstacles) {
+    if (
+      player.x < obs.x + obs.width &&
+      player.x + player.width > obs.x &&
+      player.y < obs.y + obs.height &&
+      player.y + player.height > obs.y
+    ) {
+      // 衝突！
+      endGame();
+      break;
+    }
+  }
+}
+
+function draw() {
+  // 背景
+  const grd = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  grd.addColorStop(0, "#bde5ff");
+  grd.addColorStop(1, "#e5f7ff");
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // 地面線
+  ctx.strokeStyle = "#666";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, getGroundY());
+  ctx.lineTo(canvas.width, getGroundY());
+  ctx.stroke();
+
+  // プレイヤー（四角）
+  ctx.fillStyle = "#333";
+  ctx.fillRect(player.x, player.y, player.width, player.height);
+
+  // 障害物
+  ctx.fillStyle = "#555";
+  obstacles.forEach((obs) => {
+    ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+  });
+}
+
+function loop(timestamp) {
+  const delta = (timestamp - lastTime) / 1000 || 0;
+  lastTime = timestamp;
+
+  update(delta);
+  draw();
+
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+
+// ====== ゲームオーバー処理 ======
+function endGame() {
+  if (gameOver) return;
+  gameOver = true;
+
+  if (currentTime > bestTime) {
+    bestTime = currentTime;
+    localStorage.setItem("bestTime_runGame", String(bestTime));
+  }
+
+  bestTimeEl.textContent = bestTime.toFixed(2);
+  messageEl.textContent = `ゲームオーバー！ 走行タイム：${currentTime.toFixed(2)} 秒`;
+}
+
+// ====== リスタートボタン ======
+restartBtn.addEventListener("click", () => {
+    resetGame();
+});
