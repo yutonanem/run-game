@@ -10,6 +10,13 @@ const bestTimeEl = document.getElementById("best-time");
 const messageEl = document.getElementById("message");
 const restartBtn = document.getElementById("restart-btn");
 
+// ★ 社長のイラスト画像たち
+// public フォルダに player.png / obstacle_custom.png を置いておく
+
+
+const obstacleCustomImg = new Image();
+obstacleCustomImg.src = "obstacle_custom.png";
+
 // ----- キャンバスのサイズ調整 -----
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
@@ -24,13 +31,9 @@ function randRange(min, max) {
   return Math.random() * (max - min) + min;
 }
 
-// ====== 地面の Y 座標 ======
-// ※ この値を変更すると、プレイ画面（上の空部分・下の地面の位置）が変わります
+// 地面の Y 座標（少し下げて空を広く）
 function getGroundY() {
-  const marginFromBottom = 10; 
-  // ← 画面下から地面までの距離(px)
-  //    この数字を小さくするほど地面が下に移動し、空が広くなる！
-
+  const marginFromBottom = 10;
   return canvas.height - marginFromBottom;
 }
 
@@ -48,11 +51,11 @@ let bestTime = parseFloat(localStorage.getItem("bestTime_runGame") || "0");
 let spawnTimer = 0;
 let nextSpawnInterval = 0;
 
-let difficulty = 1;
+let difficulty = 1; // 時間が経つほど上がる
 
-// ====== プレイヤー初期化 ======
+// ====== プレイヤー初期化（サイズは前回のまま） ======
 function initPlayer() {
-  // プレイヤーのサイズ（大きめ）
+  // 前回決めたサイズ：画面短辺の 22.5%（0.225）
   const size = Math.min(canvas.width, canvas.height) * 0.225;
 
   player = {
@@ -62,20 +65,16 @@ function initPlayer() {
     height: size,
     vy: 0,
     gravity: 1600,
-
-    // ★ ジャンプ力（高さ維持）
-    jumpPower: -600,
-
-    // ★ 二段ジャンプ設定
-    maxJumps: 2,
-    jumpCount: 0,
-    onGround: true
+    jumpPower: -600,  // 調整済みジャンプ力（最高到達点はこのまま）
+    onGround: true,
+    maxJumps: 2,      // 二段ジャンプ
+    jumpCount: 0
   };
 }
 
 // ====== 障害物生成 ======
 function resetSpawnTimer() {
-  // 出現間隔（増量）
+  // 出現間隔（0.7〜1.3秒）
   nextSpawnInterval = randRange(700, 1300);
   spawnTimer = 0;
 }
@@ -87,22 +86,29 @@ function spawnObstacle() {
   const rawWidth = randRange(baseSize * 0.7, baseSize * 1.4);
   const rawHeight = randRange(baseSize * 0.9, baseSize * 1.8);
 
-  // ★ 4/5 サイズに縮小
+  // 4/5 サイズに縮小
   const width = rawWidth * 0.8;
   const height = rawHeight * 0.8;
 
-  // ★ 上端は rawHeight のまま → 下だけ浮く
+  // 上端は rawHeight のまま → 下だけ浮く
   const topY = getGroundY() - rawHeight;
 
+  // 速度（難易度でだんだん速くなる）
   const baseSpeed = randRange(260, 360);
   const speed = baseSpeed * difficulty;
+
+  // ★ 障害物のタイプをランダムに決定
+  //   "image" が社長イラスト障害物
+  const shapeTypes = ["rect", "stair", "triangle", "dome", "pole", "image"];
+  const shape = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
 
   obstacles.push({
     x: canvas.width + 20,
     y: topY,
     width,
     height,
-    speed
+    speed,
+    shape
   });
 
   resetSpawnTimer();
@@ -130,7 +136,7 @@ function resetGame() {
 
 resetGame();
 
-// ====== 入力処理（二段ジャンプ対応版） ======
+// ====== 入力処理（二段ジャンプ対応） ======
 function handleJump() {
   if (!gameStarted) {
     gameStarted = true;
@@ -140,7 +146,7 @@ function handleJump() {
 
   if (gameOver) return;
 
-  // ★ 二段ジャンプOK
+  // 2回までジャンプ可能
   if (player.jumpCount < player.maxJumps) {
     player.vy = player.jumpPower;
     player.onGround = false;
@@ -172,7 +178,7 @@ function update(delta) {
   currentTime = (now - startTime) / 1000;
   currentTimeEl.textContent = currentTime.toFixed(2);
 
-  // ★ 経過時間で障害物スピードが上昇
+  // 時間経過で障害物スピードが上がる
   difficulty = 1 + currentTime * 0.03;
 
   // プレイヤー物理
@@ -181,14 +187,14 @@ function update(delta) {
 
   const groundY = getGroundY() - player.height;
 
-  // ★ 着地判定（ジャンプ回数リセット）
+  // 着地判定
   if (player.y >= groundY) {
     player.y = groundY;
     player.vy = 0;
 
     if (!player.onGround) {
       player.onGround = true;
-      player.jumpCount = 0; // ← 二段ジャンプリセット
+      player.jumpCount = 0; // 着地したら二段ジャンプ回数リセット
     }
   }
 
@@ -206,7 +212,7 @@ function update(delta) {
   // 画面外削除
   obstacles = obstacles.filter((obs) => obs.x + obs.width > 0);
 
-  // 当たり判定
+  // 当たり判定（見た目は色々でも、判定は矩形でそのまま）
   for (const obs of obstacles) {
     if (
       player.x < obs.x + obs.width &&
@@ -223,8 +229,8 @@ function update(delta) {
 function draw() {
   // 背景
   const grd = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  grd.addColorStop(0, "#bde5ff");
-  grd.addColorStop(1, "#e5f7ff");
+  grd.addColorStop(0, "#8ed6ff");
+  grd.addColorStop(1, "#c2ecff");
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -236,15 +242,98 @@ function draw() {
   ctx.lineTo(canvas.width, getGroundY());
   ctx.stroke();
 
-  // プレイヤー（黄色）
-  ctx.fillStyle = "#ffd400";
-  ctx.fillRect(player.x, player.y, player.width, player.height);
+// ★ プレイヤー（黄色い四角に固定）
+ctx.fillStyle = "#ffd400";
+ctx.fillRect(player.x, player.y, player.width, player.height);
 
-  // 障害物（灰色）
-  ctx.fillStyle = "#555";
+  // ★ 障害物たち
   obstacles.forEach((obs) => {
-    ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+    drawObstacle(obs);
   });
+}
+
+// ====== 障害物の描画 ======
+function drawObstacle(obs) {
+  // 社長イラスト障害物
+  if (obs.shape === "image") {
+    if (obstacleCustomImg.complete && obstacleCustomImg.naturalWidth > 0) {
+      ctx.drawImage(
+        obstacleCustomImg,
+        obs.x,
+        obs.y,
+        obs.width,
+        obs.height
+      );
+      return;
+    }
+    // まだ画像読み込み中なら、通常四角で代用
+  }
+
+  ctx.fillStyle = "#555";
+
+  switch (obs.shape) {
+    case "stair": {
+      // 階段
+      const steps = 3;
+      const stepWidth = obs.width / steps;
+      const stepHeight = obs.height / steps;
+
+      for (let i = 0; i < steps; i++) {
+        const w = stepWidth * (i + 1);
+        const h = stepHeight * (i + 1);
+        const x = obs.x + obs.width - w;
+        const y = obs.y + obs.height - h;
+        ctx.fillRect(x, y, w, h);
+      }
+      break;
+    }
+    case "triangle": {
+      // 三角形（山・塔）
+      ctx.beginPath();
+      ctx.moveTo(obs.x, obs.y + obs.height);
+      ctx.lineTo(obs.x + obs.width / 2, obs.y);
+      ctx.lineTo(obs.x + obs.width, obs.y + obs.height);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case "dome": {
+      // ドーム＋土台
+      const baseHeight = obs.height * 0.35;
+      const domeHeight = obs.height - baseHeight;
+
+      // 土台
+      ctx.fillRect(obs.x, obs.y + domeHeight, obs.width, baseHeight);
+
+      // ドーム（半円）
+      const cx = obs.x + obs.width / 2;
+      const cy = obs.y + domeHeight;
+      const radius = Math.min(obs.width, domeHeight * 2) / 2;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, Math.PI, 0, false);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case "pole": {
+      // 電柱っぽい柱
+      const poleWidth = obs.width * 0.3;
+      const x = obs.x + (obs.width - poleWidth) / 2;
+
+      ctx.fillRect(x, obs.y, poleWidth, obs.height);
+
+      const barHeight = obs.height * 0.1;
+      ctx.fillRect(x - poleWidth, obs.y, poleWidth * 3, barHeight);
+      break;
+    }
+    case "rect":
+    default: {
+      // 通常の四角
+      ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+      break;
+    }
+  }
 }
 
 function loop(timestamp) {
