@@ -53,6 +53,16 @@ let nextSpawnInterval = 0;
 
 let difficulty = 1; // 時間が経つほど上がる
 
+  // ★ 背景スクロール（障害物と一緒に少しずつ速くなる）
+  bgFarOffset  = (bgFarOffset  + 40  * delta * difficulty) % canvas.width;
+  bgNearOffset = (bgNearOffset + 120 * delta * difficulty) % canvas.width;
+
+
+// 背景スクロール用
+let bgFarOffset = 0;   // 遠景（山・ビル）
+let bgNearOffset = 0;  // 手前（建物や木）
+
+
 // ====== プレイヤー初期化（サイズは前回のまま） ======
 function initPlayer() {
  
@@ -227,14 +237,46 @@ function update(delta) {
 }
 
 function draw() {
-  // 背景
-  const grd = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  grd.addColorStop(0, "#8ed6ff");
-  grd.addColorStop(1, "#c2ecff");
-  ctx.fillStyle = grd;
+  // ===== 空（真っ青） =====
+  ctx.fillStyle = "#6ec9ff"; // 明るい青空
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 地面
+  // ===== 遠景（山・ビルのシルエット） =====
+  ctx.save();
+  ctx.translate(-bgFarOffset, 0); // ゆっくりスクロール
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+  const farBaseY = getGroundY() - canvas.height * 0.35; // 地面よりだいぶ上
+
+  for (let x = -canvas.width; x < canvas.width * 2; x += 140) {
+    const w = 90;
+    const h = canvas.height * (0.2 + Math.random() * 0.2); // 高さランダム
+    ctx.fillRect(x, farBaseY + (canvas.height * 0.15 - h), w, h);
+  }
+
+  ctx.restore();
+
+  // ===== 近景（建物や木っぽいブロック） =====
+  ctx.save();
+  ctx.translate(-bgNearOffset, 0); // 速めにスクロール
+
+  const nearBaseY = getGroundY() - 60; // 地面より少し上
+
+  for (let x = -canvas.width; x < canvas.width * 2; x += 160) {
+    // 建物
+    ctx.fillStyle = "#ffffff";
+    const bw = 60;
+    const bh = 40 + Math.random() * 30;
+    ctx.fillRect(x, nearBaseY - bh, bw, bh);
+
+    // 横に木っぽい柱
+    ctx.fillStyle = "#cce8ff";
+    ctx.fillRect(x + bw + 10, nearBaseY - 30, 18, 30);
+  }
+
+  ctx.restore();
+
+  // ===== 地面 =====
   ctx.strokeStyle = "#666";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -242,15 +284,26 @@ function draw() {
   ctx.lineTo(canvas.width, getGroundY());
   ctx.stroke();
 
-// ★ プレイヤー（黄色い四角に固定）
-ctx.fillStyle = "#ffd400";
-ctx.fillRect(player.x, player.y, player.width, player.height);
+  // 地面の影/帯
+  ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
+  ctx.fillRect(0, getGroundY(), canvas.width, 40);
 
-  // ★ 障害物たち
+  // ===== プレイヤー（黄色い四角） =====
+  ctx.fillStyle = "#ffd400";
+  ctx.fillRect(player.x, player.y, player.width, player.height);
+
+  // ===== 障害物 =====
   obstacles.forEach((obs) => {
-    drawObstacle(obs);
+    // 顔の画像を使っている場合など、type が custom のままの想定
+    if (obs.type === "custom" && typeof customObstacleImg !== "undefined" && customObstacleImg.complete && customObstacleImg.naturalWidth > 0) {
+      ctx.drawImage(customObstacleImg, obs.x, obs.y, obs.width, obs.height);
+    } else {
+      ctx.fillStyle = "#555";
+      ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+    }
   });
 }
+
 
 // ====== 障害物の描画 ======
 function drawObstacle(obs) {
