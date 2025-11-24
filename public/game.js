@@ -10,10 +10,7 @@ const bestTimeEl = document.getElementById("best-time");
 const messageEl = document.getElementById("message");
 const restartBtn = document.getElementById("restart-btn");
 
-// ★ 社長のイラスト画像たち
-// public フォルダに player.png / obstacle_custom.png を置いておく
-
-
+// ★ 社長のイラスト画像（障害物の一つとして使う）
 const obstacleCustomImg = new Image();
 obstacleCustomImg.src = "obstacle_custom.png";
 
@@ -51,21 +48,15 @@ let bestTime = parseFloat(localStorage.getItem("bestTime_runGame") || "0");
 let spawnTimer = 0;
 let nextSpawnInterval = 0;
 
-let difficulty = 1; // 時間が経つほど上がる
+// 時間が経つほど上がる難易度係数
+let difficulty = 1;
 
-  // ★ 背景スクロール（障害物と一緒に少しずつ速くなる）
-  bgFarOffset  = (bgFarOffset  + 40  * delta * difficulty) % canvas.width;
-  bgNearOffset = (bgNearOffset + 120 * delta * difficulty) % canvas.width;
+// 背景スクロール用（遠景と近景）
+let bgFarOffset = 0;   // 遠くのビル・山
+let bgNearOffset = 0;  // 近くの建物・木
 
-
-// 背景スクロール用
-let bgFarOffset = 0;   // 遠景（山・ビル）
-let bgNearOffset = 0;  // 手前（建物や木）
-
-
-// ====== プレイヤー初期化（サイズは前回のまま） ======
+// ====== プレイヤー初期化（サイズや数値は元のまま） ======
 function initPlayer() {
- 
   const size = Math.min(canvas.width, canvas.height) * 0.200;
 
   player = {
@@ -79,12 +70,12 @@ function initPlayer() {
     onGround: true,
     maxJumps: 3,      // 3段ジャンプ
     jumpCount: 0
-  };3
+  };
 }
 
 // ====== 障害物生成 ======
 function resetSpawnTimer() {
-  // 出現間隔（0.7〜1.3秒）
+  // 出現間隔（0.9〜1.6秒）※元のまま
   nextSpawnInterval = randRange(900, 1600);
   spawnTimer = 0;
 }
@@ -103,12 +94,12 @@ function spawnObstacle() {
   // 上端は rawHeight のまま → 下だけ浮く
   const topY = getGroundY() - rawHeight;
 
-  // 速度（難易度でだんだん速くなる）
+  // 速度（難易度でだんだん速くなる）※元の考え方のまま
   const baseSpeed = randRange(260, 360);
   const speed = baseSpeed * difficulty;
 
-  // ★ 障害物のタイプをランダムに決定
-  //   "image" が社長イラスト障害物
+  // 障害物のタイプをランダムに決定
+  // "image" が社長イラスト障害物
   const shapeTypes = ["rect", "stair", "triangle", "dome", "pole", "image"];
   const shape = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
 
@@ -138,6 +129,8 @@ function resetGame() {
   resetSpawnTimer();
 
   difficulty = 1;
+  bgFarOffset = 0;
+  bgNearOffset = 0;
 
   currentTimeEl.textContent = "0.00";
   bestTimeEl.textContent = bestTime.toFixed(2);
@@ -146,7 +139,7 @@ function resetGame() {
 
 resetGame();
 
-// ====== 入力処理（二段ジャンプ対応） ======
+// ====== 入力処理（3段ジャンプ） ======
 function handleJump() {
   if (!gameStarted) {
     gameStarted = true;
@@ -156,7 +149,6 @@ function handleJump() {
 
   if (gameOver) return;
 
-  // 2回までジャンプ可能
   if (player.jumpCount < player.maxJumps) {
     player.vy = player.jumpPower;
     player.onGround = false;
@@ -188,7 +180,7 @@ function update(delta) {
   currentTime = (now - startTime) / 1000;
   currentTimeEl.textContent = currentTime.toFixed(2);
 
-  // 時間経過で障害物スピードが上がる
+  // 時間経過で障害物スピードが上がる（元の式）
   difficulty = 1 + currentTime * 0.03;
 
   // プレイヤー物理
@@ -204,7 +196,7 @@ function update(delta) {
 
     if (!player.onGround) {
       player.onGround = true;
-      player.jumpCount = 0; // 着地したら二段ジャンプ回数リセット
+      player.jumpCount = 0; // 着地したらジャンプ回数リセット
     }
   }
 
@@ -222,7 +214,7 @@ function update(delta) {
   // 画面外削除
   obstacles = obstacles.filter((obs) => obs.x + obs.width > 0);
 
-  // 当たり判定（見た目は色々でも、判定は矩形でそのまま）
+  // 当たり判定
   for (const obs of obstacles) {
     if (
       player.x < obs.x + obs.width &&
@@ -234,33 +226,37 @@ function update(delta) {
       break;
     }
   }
+
+  // ★ 背景スクロール（障害物と一緒に少しずつ速くなる）
+  bgFarOffset = (bgFarOffset + 40 * delta * difficulty) % canvas.width;
+  bgNearOffset = (bgNearOffset + 120 * delta * difficulty) % canvas.width;
 }
 
-function draw() {
-  // ===== 空（真っ青） =====
+// ====== 背景の描画（パララックス） ======
+function drawBackground() {
+  // 空
   ctx.fillStyle = "#6ec9ff"; // 明るい青空
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // ===== 遠景（山・ビルのシルエット） =====
-  ctx.save();
-  ctx.translate(-bgFarOffset, 0); // ゆっくりスクロール
+  const groundY = getGroundY();
 
+  // 遠景（ビルのシルエット）
+  ctx.save();
+  ctx.translate(-bgFarOffset, 0);
   ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-  const farBaseY = getGroundY() - canvas.height * 0.35; // 地面よりだいぶ上
+  const farBaseY = groundY - canvas.height * 0.35;
 
   for (let x = -canvas.width; x < canvas.width * 2; x += 140) {
     const w = 90;
-    const h = canvas.height * (0.2 + Math.random() * 0.2); // 高さランダム
+    const h = canvas.height * (0.2 + Math.random() * 0.2);
     ctx.fillRect(x, farBaseY + (canvas.height * 0.15 - h), w, h);
   }
-
   ctx.restore();
 
-  // ===== 近景（建物や木っぽいブロック） =====
+  // 近景（建物＋木みたいなもの）
   ctx.save();
-  ctx.translate(-bgNearOffset, 0); // 速めにスクロール
-
-  const nearBaseY = getGroundY() - 60; // 地面より少し上
+  ctx.translate(-bgNearOffset, 0);
+  const nearBaseY = groundY - 60;
 
   for (let x = -canvas.width; x < canvas.width * 2; x += 160) {
     // 建物
@@ -269,57 +265,34 @@ function draw() {
     const bh = 40 + Math.random() * 30;
     ctx.fillRect(x, nearBaseY - bh, bw, bh);
 
-    // 横に木っぽい柱
+    // 木の柱っぽい
     ctx.fillStyle = "#cce8ff";
     ctx.fillRect(x + bw + 10, nearBaseY - 30, 18, 30);
   }
-
   ctx.restore();
 
-  // ===== 地面 =====
+  // 地面ライン
   ctx.strokeStyle = "#666";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(0, getGroundY());
-  ctx.lineTo(canvas.width, getGroundY());
+  ctx.moveTo(0, groundY);
+  ctx.lineTo(canvas.width, groundY);
   ctx.stroke();
 
   // 地面の影/帯
   ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
-  ctx.fillRect(0, getGroundY(), canvas.width, 40);
-
-  // ===== プレイヤー（黄色い四角） =====
-  ctx.fillStyle = "#ffd400";
-  ctx.fillRect(player.x, player.y, player.width, player.height);
-
-  // ===== 障害物 =====
-  obstacles.forEach((obs) => {
-    // 顔の画像を使っている場合など、type が custom のままの想定
-    if (obs.type === "custom" && typeof customObstacleImg !== "undefined" && customObstacleImg.complete && customObstacleImg.naturalWidth > 0) {
-      ctx.drawImage(customObstacleImg, obs.x, obs.y, obs.width, obs.height);
-    } else {
-      ctx.fillStyle = "#555";
-      ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-    }
-  });
+  ctx.fillRect(0, groundY, canvas.width, 40);
 }
-
 
 // ====== 障害物の描画 ======
 function drawObstacle(obs) {
   // 社長イラスト障害物
   if (obs.shape === "image") {
     if (obstacleCustomImg.complete && obstacleCustomImg.naturalWidth > 0) {
-      ctx.drawImage(
-        obstacleCustomImg,
-        obs.x,
-        obs.y,
-        obs.width,
-        obs.height
-      );
+      ctx.drawImage(obstacleCustomImg, obs.x, obs.y, obs.width, obs.height);
       return;
     }
-    // まだ画像読み込み中なら、通常四角で代用
+    // まだ画像読み込み中なら下の矩形にフォールバック
   }
 
   ctx.fillStyle = "#555";
@@ -341,7 +314,7 @@ function drawObstacle(obs) {
       break;
     }
     case "triangle": {
-      // 三角形（山・塔）
+      // 三角形
       ctx.beginPath();
       ctx.moveTo(obs.x, obs.y + obs.height);
       ctx.lineTo(obs.x + obs.width / 2, obs.y);
@@ -382,11 +355,22 @@ function drawObstacle(obs) {
     }
     case "rect":
     default: {
-      // 通常の四角
       ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
       break;
     }
   }
+}
+
+// ====== 描画全体 ======
+function draw() {
+  drawBackground();
+
+  // プレイヤー（黄色い四角）
+  ctx.fillStyle = "#ffd400";
+  ctx.fillRect(player.x, player.y, player.width, player.height);
+
+  // 障害物
+  obstacles.forEach((obs) => drawObstacle(obs));
 }
 
 function loop(timestamp) {
