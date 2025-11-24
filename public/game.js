@@ -55,8 +55,8 @@ let difficulty = 1; // 時間が経つほど上がる
 
 // ====== プレイヤー初期化（サイズは前回のまま） ======
 function initPlayer() {
-  // 前回決めたサイズ：画面短辺の 22.5%（0.225）
-  const size = Math.min(canvas.width, canvas.height) * 0.225;
+ 
+  const size = Math.min(canvas.width, canvas.height) * 0.200;
 
   player = {
     x: canvas.width * 0.2,
@@ -65,7 +65,7 @@ function initPlayer() {
     height: size,
     vy: 0,
     gravity: 1600,
-    jumpPower: -400,  // 調整済みジャンプ力
+    jumpPower: -600,  // 調整済みジャンプ力
     onGround: true,
     maxJumps: 3,      // 3段ジャンプ
     jumpCount: 0
