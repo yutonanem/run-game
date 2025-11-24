@@ -65,17 +65,17 @@ function initPlayer() {
     height: size,
     vy: 0,
     gravity: 1600,
-    jumpPower: -600,  // 調整済みジャンプ力（最高到達点はこのまま）
+    jumpPower: -400,  // 調整済みジャンプ力
     onGround: true,
-    maxJumps: 2,      // 二段ジャンプ
+    maxJumps: 3,      // 3段ジャンプ
     jumpCount: 0
-  };
+  };3
 }
 
 // ====== 障害物生成 ======
 function resetSpawnTimer() {
   // 出現間隔（0.7〜1.3秒）
-  nextSpawnInterval = randRange(700, 1300);
+  nextSpawnInterval = randRange(900, 1600);
   spawnTimer = 0;
 }
 
