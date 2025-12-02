@@ -146,29 +146,42 @@ function resetSpawnTimer() {
 
 function spawnObstacle() {
   const baseSize = player.height;
+
+  // ★ 通常障害物の元サイズ（前回のまま）
   const rawWidth = randRange(baseSize * 0.7, baseSize * 1.4);
   const rawHeight = randRange(baseSize * 0.9, baseSize * 1.8);
 
+  // ★ 通常障害物は4/5サイズ（前の設定どおり）
   const width = rawWidth * 0.8;
   const height = rawHeight * 0.8;
 
+  // 上端は rawHeight のまま → 下が浮くスタイル
   const topY = getGroundY() - rawHeight;
 
+  // ★ ベース速度（難易度）
   const baseSpeed = randRange(260, 360);
   const speed = baseSpeed * difficulty;
 
+  // ★ ランダム形状（火の玉追加）
   const shapeTypes = ["rect", "stair", "triangle", "dome", "pole", "image", "fireball"];
   const shape = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
 
-  let obsY = topY;
+  // ---- ここから shape に応じて個別調整 ----
   let obsWidth = width;
   let obsHeight = height;
+  let obsY = topY;
   let obsSpeed = speed;
 
   if (shape === "fireball") {
-    obsHeight = baseSize * 0.9 * 2;
-    obsWidth = baseSize * 1.2 * 2;
-    obsY = getGroundY() - baseSize * 1.4;
+    // ★ 火の玉だけ2倍のサイズに
+    const fireBase = baseSize * 1.8; // 2倍（0.9 → 約1.8）
+    obsWidth = fireBase * 1.3;
+    obsHeight = fireBase * 0.9;
+
+    // ★ 飛行高度（少し高く飛ばす）
+    obsY = getGroundY() - fireBase * 1.5;
+
+    // ★ 火の玉だけ速く！
     obsSpeed = speed * 1.3;
   }
 
@@ -183,6 +196,7 @@ function spawnObstacle() {
 
   resetSpawnTimer();
 }
+
 
 // ====== ゲームリセット ======
 function resetGame() {
