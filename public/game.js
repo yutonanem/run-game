@@ -22,11 +22,32 @@ fireballImg.src = "fireball.png";
 const playerImg = new Image();
 playerImg.src = "firefighter.png";
 
-// ----- キャンバスサイズ調整 -----
+// ----- キャンバスサイズ調整（スマホ横向き想定） -----
 function resizeCanvas() {
-  const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width;
-  canvas.height = rect.height;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const isPortrait = vh > vw;
+
+  // 縦向き → 高さ控えめ＋「横向きにしてね」メッセージ
+  let width = vw;
+  let height;
+
+  if (isPortrait) {
+    height = vh * 0.6; // 画面上部6割だけ使う
+    messageEl.textContent = "スマホは横向きにして遊んでね📱↔";
+  } else {
+    height = vh * 0.8; // 横向きのときは画面の8割をキャンバスに
+    if (!gameStarted && !gameOver) {
+      messageEl.textContent = "画面タップ or スペースキーでスタート＆ジャンプ！";
+    }
+  }
+
+  canvas.width = width;
+  canvas.height = height;
+
+  // スタイルでも指定してなるべく画面をめいっぱい使う
+  canvas.style.width = width + "px";
+  canvas.style.height = height + "px";
 }
 resizeCanvas();
 window.addEventListener("resize", resizeCanvas);
@@ -62,7 +83,7 @@ let difficulty = 1;
 
 // ====== プレイヤー（消防士）初期化 ======
 function initPlayer() {
-  // サイズ 2倍
+  // 消防士のサイズ（今のまま）
   const size = Math.min(canvas.width, canvas.height) * 0.4;
 
   player = {
@@ -107,13 +128,14 @@ function initBackground() {
   }
 }
 
+// ====== 当たり判定（ヒットボックス） ======
+
 // プレイヤーの当たり判定（消防士の“胴体中心”くらいだけ判定に使う）
 function getPlayerHitbox() {
   // 横は45%、縦は75%くらいに縮める（かなり甘め）
   const hitWidth = player.width * 0.45;
   const hitHeight = player.height * 0.75;
 
-  // 中央寄せ（頭・足・腕のギリギリは少し無視するイメージ）
   const offsetX = (player.width - hitWidth) / 2;
   const offsetY = (player.height - hitHeight) / 2;
 
@@ -124,6 +146,7 @@ function getPlayerHitbox() {
     height: hitHeight
   };
 }
+
 // 障害物の当たり判定（少し小さくして、角スレスレはセーフに）
 function getObstacleHitbox(obs) {
   const marginX = obs.width * 0.18;  // 左右を18%ずつ削る
@@ -136,7 +159,6 @@ function getObstacleHitbox(obs) {
     height: obs.height - marginY * 2
   };
 }
-
 
 // ====== 障害物生成 ======
 function resetSpawnTimer() {
@@ -152,37 +174,36 @@ function spawnObstacle() {
   const rawHeight = randRange(baseSize * 0.9, baseSize * 1.8);
 
   // ★ 通常障害物は4/5サイズ（前の設定どおり）
-  const width = rawWidth * 0.8;
-  const height = rawHeight * 0.8;
+  const baseWidth = rawWidth * 0.8;
+  const baseHeight = rawHeight * 0.8;
+
+  // ★ 今の1/2にしたいのでここで半分にする（火の玉以外）
+  let obsWidth = baseWidth * 0.5;
+  let obsHeight = baseHeight * 0.5;
 
   // 上端は rawHeight のまま → 下が浮くスタイル
-  const topY = getGroundY() - rawHeight;
+  let obsY = getGroundY() - rawHeight; // 位置は元の高さ基準のまま
 
   // ★ ベース速度（難易度）
   const baseSpeed = randRange(260, 360);
-  const speed = baseSpeed * difficulty;
+  let obsSpeed = baseSpeed * difficulty;
 
   // ★ ランダム形状（火の玉追加）
   const shapeTypes = ["rect", "stair", "triangle", "dome", "pole", "image", "fireball"];
   const shape = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
 
-  // ---- ここから shape に応じて個別調整 ----
-  let obsWidth = width;
-  let obsHeight = height;
-  let obsY = topY;
-  let obsSpeed = speed;
-
+  // ---- 火の玉だけ個別調整 ----
   if (shape === "fireball") {
-    // ★ 火の玉だけ2倍のサイズに
-    const fireBase = baseSize * 1.8; // 2倍（0.9 → 約1.8）
+    // 火の玉は2倍サイズ（今の設定維持）
+    const fireBase = baseSize * 1.8;
     obsWidth = fireBase * 1.3;
     obsHeight = fireBase * 0.9;
 
-    // ★ 飛行高度（少し高く飛ばす）
+    // 飛行高度（少し高く飛ばす）
     obsY = getGroundY() - fireBase * 1.5;
 
-    // ★ 火の玉だけ速く！
-    obsSpeed = speed * 1.3;
+    // 火の玉だけ速く！
+    obsSpeed = obsSpeed * 1.3;
   }
 
   obstacles.push({
@@ -196,7 +217,6 @@ function spawnObstacle() {
 
   resetSpawnTimer();
 }
-
 
 // ====== ゲームリセット ======
 function resetGame() {
@@ -216,9 +236,9 @@ function resetGame() {
 
   currentTimeEl.textContent = "0.00";
   bestTimeEl.textContent = bestTime.toFixed(2);
-  messageEl.textContent = "画面タップ or スペースキーでスタート＆ジャンプ！";
 }
 
+// 初期化
 resetGame();
 
 // ====== 入力 ======
