@@ -10,6 +10,14 @@ const bestTimeEl = document.getElementById("best-time");
 const messageEl = document.getElementById("message");
 const restartBtn = document.getElementById("restart-btn");
 
+// ログイン用要素
+const loginArea = document.getElementById("login-area");
+const nameInput = document.getElementById("player-name-input");
+const loginBtn = document.getElementById("login-btn");
+const userInfo = document.getElementById("user-info");
+const userNameLabel = document.getElementById("user-name-label");
+const logoutBtn = document.getElementById("logout-btn");
+
 // ★ 社長イラスト障害物
 const obstacleCustomImg = new Image();
 obstacleCustomImg.src = "obstacle_custom.png";
@@ -42,6 +50,28 @@ let nextSpawnInterval = 0;
 let difficulty = 1;
 let lastTime = 0;
 
+// ログイン状態
+let playerName = localStorage.getItem("playerName") || "";
+
+// ----- ログインUI更新 -----
+function updateLoginUI() {
+  if (playerName) {
+    loginArea.hidden = true;
+    userInfo.hidden = false;
+    userNameLabel.textContent = playerName;
+    // ログイン済みメッセージ
+    if (!gameStarted && !gameOver) {
+      messageEl.textContent = `${playerName} さん、画面タップ or スペースキーでスタート＆ジャンプ！`;
+    }
+  } else {
+    loginArea.hidden = false;
+    userInfo.hidden = true;
+    if (!gameStarted && !gameOver) {
+      messageEl.textContent = "まず名前を入力してログインしてね";
+    }
+  }
+}
+
 // ----- キャンバスサイズ調整（縦画面・シンプル版） -----
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
@@ -63,7 +93,6 @@ function getGroundY() {
 
 // ====== プレイヤー（消防士）初期化 ======
 function initPlayer() {
-  // 消防士のサイズ（今まで通り大きめ）
   const size = Math.min(canvas.width, canvas.height) * 0.4;
 
   player = {
@@ -145,18 +174,16 @@ function resetSpawnTimer() {
 function spawnObstacle() {
   const baseSize = player.height;
 
-  // 通常障害物の元サイズ
   const rawWidth = randRange(baseSize * 0.7, baseSize * 1.4);
   const rawHeight = randRange(baseSize * 0.9, baseSize * 1.8);
 
-  // 4/5 → さらに 1/2 に（大きさを抑える）
   const baseWidth = rawWidth * 0.8;
   const baseHeight = rawHeight * 0.8;
 
   let obsWidth = baseWidth * 0.5;
   let obsHeight = baseHeight * 0.5;
 
-  // ★「宙に浮かないように」→ すべて地面に接地させる
+  // ★ 全部地面に接地（火の玉以外）
   let obsY = getGroundY() - obsHeight;
 
   const baseSpeed = randRange(260, 360);
@@ -165,12 +192,10 @@ function spawnObstacle() {
   const shapeTypes = ["rect", "stair", "triangle", "dome", "pole", "image", "fireball"];
   const shape = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
 
-  // 火の玉だけ空中＆2倍サイズ
   if (shape === "fireball") {
     const fireBase = baseSize * 1.8;
     obsWidth = fireBase * 1.3;
     obsHeight = fireBase * 0.9;
-
     obsY = getGroundY() - fireBase * 1.5; // 空中を飛ぶ
     obsSpeed = obsSpeed * 1.3;
   }
@@ -205,14 +230,39 @@ function resetGame() {
 
   currentTimeEl.textContent = "0.00";
   bestTimeEl.textContent = bestTime.toFixed(2);
-  messageEl.textContent = "画面タップ or スペースキーでスタート＆ジャンプ！";
+
+  updateLoginUI();
 }
 
 // 初期化
 resetGame();
 
+// ====== ログイン処理 ======
+loginBtn.addEventListener("click", () => {
+  const name = nameInput.value.trim();
+  if (!name) {
+    alert("なまえを入力してね！");
+    return;
+  }
+  playerName = name;
+  localStorage.setItem("playerName", playerName);
+  updateLoginUI();
+});
+
+logoutBtn.addEventListener("click", () => {
+  localStorage.removeItem("playerName");
+  playerName = "";
+  resetGame();
+});
+
 // ====== 入力 ======
 function handleJump() {
+  // ログインしていないときはゲーム開始させない
+  if (!playerName) {
+    messageEl.textContent = "まず名前を入力してログインしてね";
+    return;
+  }
+
   if (!gameStarted) {
     gameStarted = true;
     startTime = performance.now();
@@ -305,7 +355,6 @@ function update(delta) {
 
 // ====== 障害物描画 ======
 function drawObstacle(obs) {
-  // 火の玉
   if (obs.shape === "fireball" && fireballImg.complete && fireballImg.naturalWidth > 0) {
     ctx.save();
     ctx.translate(obs.x + obs.width / 2, obs.y + obs.height / 2);
@@ -315,13 +364,11 @@ function drawObstacle(obs) {
     return;
   }
 
-  // 社長イラスト障害物
   if (obs.shape === "image" && obstacleCustomImg.complete && obstacleCustomImg.naturalWidth > 0) {
     ctx.drawImage(obstacleCustomImg, obs.x, obs.y, obs.width, obs.height);
     return;
   }
 
-  // その他の形
   ctx.fillStyle = "#555";
 
   switch (obs.shape) {
@@ -372,19 +419,15 @@ function drawObstacle(obs) {
 
 // ====== 描画 ======
 function draw() {
-  // 空
   ctx.fillStyle = "#6ec9ff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 遠景
   ctx.fillStyle = "rgba(255,255,255,0.35)";
   bgFarBlocks.forEach((b) => ctx.fillRect(b.x, b.y, b.width, b.height));
 
-  // 近景
   ctx.fillStyle = "rgba(255,255,255,0.7)";
   bgNearBlocks.forEach((b) => ctx.fillRect(b.x, b.y, b.width, b.height));
 
-  // 地面
   const groundY = getGroundY();
   ctx.strokeStyle = "#666";
   ctx.lineWidth = 2;
@@ -396,7 +439,6 @@ function draw() {
   ctx.fillStyle = "rgba(0,0,0,0.05)";
   ctx.fillRect(0, groundY, canvas.width, 40);
 
-  // プレイヤー（消防士）
   if (playerImg.complete && playerImg.naturalWidth > 0) {
     ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
   } else {
@@ -404,10 +446,8 @@ function draw() {
     ctx.fillRect(player.x, player.y, player.width, player.height);
   }
 
-  // 障害物
   obstacles.forEach(drawObstacle);
 
-  // GAME OVER オーバーレイ
   if (gameOver) {
     ctx.save();
 
@@ -438,7 +478,7 @@ function draw() {
   }
 }
 
-// ====== ループ ======
+// ====== ループ開始 ======
 function loop(timestamp) {
   const delta = (timestamp - lastTime) / 1000 || 0;
   lastTime = timestamp;
@@ -467,3 +507,6 @@ function endGame() {
 
 // ====== リスタート ======
 restartBtn.addEventListener("click", resetGame);
+
+// 初期のログインUI反映
+updateLoginUI();
