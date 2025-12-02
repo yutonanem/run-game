@@ -10,45 +10,82 @@
   </head>
   <body>
     <div class="wrapper">
-      <!-- ▼ ログインエリア ▼ -->
-      <div id="login-area" class="login-area">
-        <p class="login-title">ログイン</p>
-        <input
-          id="player-name-input"
-          class="login-input"
-          type="text"
-          maxlength="16"
-          placeholder="なまえを入力"
-        />
-        <button id="login-btn" class="login-btn">ゲームスタート</button>
+      <!-- ▼ ランキング画面 ▼ -->
+      <div id="screen-ranking" class="screen">
+        <h1>暇つぶしランゲーム</h1>
+        <p class="desc">
+          画面タップ or スペースキーでジャンプ！<br />
+          段差につまずかずに、できるだけ長く走り続けよう🏃‍♀️✨
+        </p>
+
+        <section class="ranking-section">
+          <h2 class="ranking-title">ランキング TOP3</h2>
+          <table class="ranking-table">
+            <thead>
+              <tr>
+                <th>順位</th>
+                <th>名前</th>
+                <th>タイム（秒）</th>
+              </tr>
+            </thead>
+            <tbody id="ranking-body"></tbody>
+          </table>
+          <p id="ranking-empty" class="ranking-empty">
+            まだ記録がありません。まずはゲームをプレイしてみよう！
+          </p>
+        </section>
+
+        <button id="go-game-btn" class="primary-btn">
+          ゲームスタート
+        </button>
       </div>
 
-      <!-- ▼ ログイン済み情報 ▼ -->
-      <div id="user-info" class="user-info" hidden>
-        <span id="user-name-label"></span> さんでプレイ中
-        <button id="logout-btn" class="logout-btn">ログアウト</button>
+      <!-- ▼ ゲーム画面 ▼ -->
+      <div id="screen-game" class="screen" hidden>
+        <button id="back-ranking-btn" class="back-btn">
+          ← ランキングにもどる
+        </button>
+
+        <!-- ログインエリア -->
+        <div id="login-area" class="login-area">
+          <p class="login-title">ログイン</p>
+          <input
+            id="player-name-input"
+            class="login-input"
+            type="text"
+            maxlength="16"
+            placeholder="なまえを入力"
+          />
+          <button id="login-btn" class="login-btn">ゲームスタート</button>
+        </div>
+
+        <!-- ログイン済み情報 -->
+        <div id="user-info" class="user-info" hidden>
+          <span id="user-name-label"></span> さんでプレイ中
+          <button id="logout-btn" class="logout-btn">ログアウト</button>
+        </div>
+
+        <h1>暇つぶしランゲーム</h1>
+        <p class="desc">
+          画面タップ or スペースキーでジャンプ！<br />
+          段差につまずかずに、できるだけ長く走り続けよう🏃‍♀️✨
+        </p>
+
+        <canvas id="gameCanvas"></canvas>
+
+        <div class="hud">
+          <div>今回のタイム：<span id="current-time">0.00</span> 秒</div>
+          <div>ベストタイム：<span id="best-time">0.00</span> 秒</div>
+        </div>
+
+        <div id="message" class="status"></div>
+        <button id="restart-btn" class="restart-btn">もう一度</button>
       </div>
-
-      <h1>暇つぶしランゲーム</h1>
-      <p class="desc">
-        画面タップ or スペースキーでジャンプ！<br />
-        段差につまずかずに、できるだけ長く走り続けよう🏃‍♀️✨
-      </p>
-
-      <canvas id="gameCanvas"></canvas>
-
-      <div class="hud">
-        <div>今回のタイム：<span id="current-time">0.00</span> 秒</div>
-        <div>ベストタイム：<span id="best-time">0.00</span> 秒</div>
-      </div>
-
-      <div id="message" class="status"></div>
-      <button id="restart-btn" class="restart-btn">もう一度</button>
     </div>
 
     <script src="./game.js"></script>
 
-    <!-- PWA用 Service Worker 登録（すでにあったものを残しておく） -->
+    <!-- PWA用 Service Worker 登録 -->
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {

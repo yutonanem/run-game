@@ -1,6 +1,12 @@
 // ====== 暇つぶしランゲーム game.js ======
 "use strict";
 
+// 画面要素
+const screenRanking = document.getElementById("screen-ranking");
+const screenGame = document.getElementById("screen-game");
+const goGameBtn = document.getElementById("go-game-btn");
+const backRankingBtn = document.getElementById("back-ranking-btn");
+
 // キャンバスとUI要素
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -18,19 +24,22 @@ const userInfo = document.getElementById("user-info");
 const userNameLabel = document.getElementById("user-name-label");
 const logoutBtn = document.getElementById("logout-btn");
 
-// ★ 社長イラスト障害物
+// ランキング用要素
+const rankingBody = document.getElementById("ranking-body");
+const rankingEmpty = document.getElementById("ranking-empty");
+
+// 画像
 const obstacleCustomImg = new Image();
 obstacleCustomImg.src = "obstacle_custom.png";
 
-// ★ 火の玉画像
 const fireballImg = new Image();
 fireballImg.src = "fireball.png";
 
-// ★ 消防士プレイヤー画像（右向きPNG）
 const playerImg = new Image();
 playerImg.src = "firefighter.png";
 
-// ====== ゲーム状態（先に宣言しておく） ======
+// ====== 定数 & 状態 ======
+const RANKING_KEY = "runGame_ranking"; // [{name, time}] を保存
 let player;
 let obstacles = [];
 
@@ -50,16 +59,30 @@ let nextSpawnInterval = 0;
 let difficulty = 1;
 let lastTime = 0;
 
-// ログイン状態
 let playerName = localStorage.getItem("playerName") || "";
 
-// ----- ログインUI更新 -----
+// ====== 共通関数 ======
+function randRange(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function getGroundY() {
+  return canvas.height - 10;
+}
+
+// ====== キャンバスサイズ ======
+function resizeCanvas() {
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+}
+
+// ====== ログインUI ======
 function updateLoginUI() {
   if (playerName) {
     loginArea.hidden = true;
     userInfo.hidden = false;
     userNameLabel.textContent = playerName;
-    // ログイン済みメッセージ
     if (!gameStarted && !gameOver) {
       messageEl.textContent = `${playerName} さん、画面タップ or スペースキーでスタート＆ジャンプ！`;
     }
@@ -72,26 +95,74 @@ function updateLoginUI() {
   }
 }
 
-// ----- キャンバスサイズ調整（縦画面・シンプル版） -----
-function resizeCanvas() {
-  const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width;
-  canvas.height = rect.height;
-}
-resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
-
-// ----- ランダム -----
-function randRange(min, max) {
-  return Math.random() * (max - min) + min;
-}
-
-// 地面
-function getGroundY() {
-  return canvas.height - 10;
+// ====== ランキング関連 ======
+function loadRanking() {
+  try {
+    const raw = localStorage.getItem(RANKING_KEY);
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    if (!Array.isArray(list)) return [];
+    return list;
+  } catch {
+    return [];
+  }
 }
 
-// ====== プレイヤー（消防士）初期化 ======
+function saveRanking(list) {
+  localStorage.setItem(RANKING_KEY, JSON.stringify(list));
+}
+
+function renderRanking() {
+  const list = loadRanking().sort((a, b) => b.time - a.time).slice(0, 3);
+
+  rankingBody.innerHTML = "";
+
+  if (list.length === 0) {
+    rankingEmpty.style.display = "block";
+    return;
+  }
+  rankingEmpty.style.display = "none";
+
+  list.forEach((entry, index) => {
+    const tr = document.createElement("tr");
+
+    const rankTd = document.createElement("td");
+    rankTd.textContent = index + 1;
+
+    const nameTd = document.createElement("td");
+    nameTd.textContent = entry.name;
+
+    const timeTd = document.createElement("td");
+    timeTd.textContent = entry.time.toFixed(2);
+
+    tr.appendChild(rankTd);
+    tr.appendChild(nameTd);
+    tr.appendChild(timeTd);
+    rankingBody.appendChild(tr);
+  });
+}
+
+function updateRankingAfterGame() {
+  if (!playerName) return;
+
+  let list = loadRanking();
+  const idx = list.findIndex((e) => e.name === playerName);
+
+  if (idx >= 0) {
+    if (bestTime > list[idx].time) {
+      list[idx].time = bestTime;
+    }
+  } else {
+    list.push({ name: playerName, time: bestTime });
+  }
+
+  list.sort((a, b) => b.time - a.time);
+  list = list.slice(0, 3);
+  saveRanking(list);
+  renderRanking();
+}
+
+// ====== プレイヤー初期化 ======
 function initPlayer() {
   const size = Math.min(canvas.width, canvas.height) * 0.4;
 
@@ -116,35 +187,29 @@ function initBackground() {
 
   const groundY = getGroundY();
 
-  // 遠景
   for (let i = 0; i < 10; i++) {
     const w = 180;
     const h = canvas.height * randRange(0.15, 0.28);
     const x = i * 180;
     const y = groundY - canvas.height * 0.55 - h;
-
     bgFarBlocks.push({ x, y, width: w, height: h, speed: 40 });
   }
 
-  // 近景
   for (let i = 0; i < 10; i++) {
     const w = 120;
     const h = canvas.height * randRange(0.18, 0.25);
     const x = i * 160 + 40;
     const y = groundY - canvas.height * 0.35 - h;
-
     bgNearBlocks.push({ x, y, width: w, height: h, speed: 100 });
   }
 }
 
-// ====== 当たり判定用ヒットボックス ======
+// ====== ヒットボックス ======
 function getPlayerHitbox() {
   const hitWidth = player.width * 0.45;
   const hitHeight = player.height * 0.75;
-
   const offsetX = (player.width - hitWidth) / 2;
   const offsetY = (player.height - hitHeight) / 2;
-
   return {
     x: player.x + offsetX,
     y: player.y + offsetY,
@@ -155,8 +220,7 @@ function getPlayerHitbox() {
 
 function getObstacleHitbox(obs) {
   const marginX = obs.width * 0.18;
-  const marginY = obs.height * 0.10;
-
+  const marginY = obs.height * 0.1;
   return {
     x: obs.x + marginX,
     y: obs.y + marginY,
@@ -183,7 +247,7 @@ function spawnObstacle() {
   let obsWidth = baseWidth * 0.5;
   let obsHeight = baseHeight * 0.5;
 
-  // ★ 全部地面に接地（火の玉以外）
+  // 地面に接地
   let obsY = getGroundY() - obsHeight;
 
   const baseSpeed = randRange(260, 360);
@@ -196,7 +260,7 @@ function spawnObstacle() {
     const fireBase = baseSize * 1.8;
     obsWidth = fireBase * 1.3;
     obsHeight = fireBase * 0.9;
-    obsY = getGroundY() - fireBase * 1.5; // 空中を飛ぶ
+    obsY = getGroundY() - fireBase * 1.5; // 空中
     obsSpeed = obsSpeed * 1.3;
   }
 
@@ -234,9 +298,6 @@ function resetGame() {
   updateLoginUI();
 }
 
-// 初期化
-resetGame();
-
 // ====== ログイン処理 ======
 loginBtn.addEventListener("click", () => {
   const name = nameInput.value.trim();
@@ -255,9 +316,25 @@ logoutBtn.addEventListener("click", () => {
   resetGame();
 });
 
+// ====== 画面切り替え ======
+goGameBtn.addEventListener("click", () => {
+  screenRanking.hidden = true;
+  screenGame.hidden = false;
+  resizeCanvas(); // 表示後にサイズ再計算
+  resetGame();
+});
+
+backRankingBtn.addEventListener("click", () => {
+  screenGame.hidden = true;
+  screenRanking.hidden = false;
+  gameStarted = false;
+  gameOver = false;
+  messageEl.textContent = "";
+  renderRanking();
+});
+
 // ====== 入力 ======
 function handleJump() {
-  // ログインしていないときはゲーム開始させない
   if (!playerName) {
     messageEl.textContent = "まず名前を入力してログインしてね";
     return;
@@ -364,7 +441,11 @@ function drawObstacle(obs) {
     return;
   }
 
-  if (obs.shape === "image" && obstacleCustomImg.complete && obstacleCustomImg.naturalWidth > 0) {
+  if (
+    obs.shape === "image" &&
+    obstacleCustomImg.complete &&
+    obstacleCustomImg.naturalWidth > 0
+  ) {
     ctx.drawImage(obstacleCustomImg, obs.x, obs.y, obs.width, obs.height);
     return;
   }
@@ -436,7 +517,7 @@ function draw() {
   ctx.lineTo(canvas.width, groundY);
   ctx.stroke();
 
-  ctx.fillStyle = "rgba(0,0,0,0.05)";
+  ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
   ctx.fillRect(0, groundY, canvas.width, 40);
 
   if (playerImg.complete && playerImg.naturalWidth > 0) {
@@ -450,8 +531,7 @@ function draw() {
 
   if (gameOver) {
     ctx.save();
-
-    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const cx = canvas.width / 2;
@@ -482,18 +562,20 @@ function draw() {
 function loop(timestamp) {
   const delta = (timestamp - lastTime) / 1000 || 0;
   lastTime = timestamp;
-
   update(delta);
   draw();
-
   requestAnimationFrame(loop);
 }
+
+// 初期化
+resizeCanvas();
+resetGame();
+renderRanking();
 requestAnimationFrame(loop);
 
 // ====== ゲームオーバー ======
 function endGame() {
   if (gameOver) return;
-
   gameOver = true;
 
   if (currentTime > bestTime) {
@@ -503,10 +585,10 @@ function endGame() {
 
   bestTimeEl.textContent = bestTime.toFixed(2);
   messageEl.textContent = `ゲームオーバー！ 走行タイム：${currentTime.toFixed(2)} 秒`;
+
+  // ランキング更新
+  updateRankingAfterGame();
 }
 
 // ====== リスタート ======
 restartBtn.addEventListener("click", resetGame);
-
-// 初期のログインUI反映
-updateLoginUI();
