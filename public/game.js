@@ -107,10 +107,13 @@ function initBackground() {
   }
 }
 
-// ====== 当たり判定（正確版） ======
+// プレイヤーの当たり判定（消防士の“胴体中心”くらいだけ判定に使う）
 function getPlayerHitbox() {
-  const hitWidth = player.width * 0.6;
-  const hitHeight = player.height * 0.9;
+  // 横は45%、縦は75%くらいに縮める（かなり甘め）
+  const hitWidth = player.width * 0.45;
+  const hitHeight = player.height * 0.75;
+
+  // 中央寄せ（頭・足・腕のギリギリは少し無視するイメージ）
   const offsetX = (player.width - hitWidth) / 2;
   const offsetY = (player.height - hitHeight) / 2;
 
@@ -121,10 +124,10 @@ function getPlayerHitbox() {
     height: hitHeight
   };
 }
-
+// 障害物の当たり判定（少し小さくして、角スレスレはセーフに）
 function getObstacleHitbox(obs) {
-  const marginX = obs.width * 0.1;
-  const marginY = obs.height * 0.05;
+  const marginX = obs.width * 0.18;  // 左右を18%ずつ削る
+  const marginY = obs.height * 0.10; // 上下を10%ずつ削る
 
   return {
     x: obs.x + marginX,
@@ -133,6 +136,7 @@ function getObstacleHitbox(obs) {
     height: obs.height - marginY * 2
   };
 }
+
 
 // ====== 障害物生成 ======
 function resetSpawnTimer() {
