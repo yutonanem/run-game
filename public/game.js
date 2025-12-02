@@ -16,7 +16,9 @@ obstacleCustomImg.src = "obstacle_custom.png";
 // 火の玉画像
 const fireballImg = new Image();
 fireballImg.src = "fireball.png";
-
+// ★ 消防士プレイヤー画像
+const playerImg = new Image();
+playerImg.src = "firefighter.png";
 
 // ----- キャンバスのサイズ調整 -----
 function resizeCanvas() {
@@ -427,9 +429,40 @@ function draw() {
   ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
   ctx.fillRect(0, groundY, canvas.width, 40);
 
-  // プレイヤー
-  ctx.fillStyle = "#ffd400";
-  ctx.fillRect(player.x, player.y, player.width, player.height);
+  // プレイヤー（消防士の画像）
+  if (playerImg.complete && playerImg.naturalWidth > 0) {
+    // アスペクト比を保ちながら、プレイヤーの当たり判定枠にフィットさせる
+    const imgRatio = playerImg.width / playerImg.height;
+    const boxRatio = player.width / player.height;
+
+    let drawW, drawH, offsetX, offsetY;
+
+    if (imgRatio > boxRatio) {
+      // 画像の方が横長 → 幅を枠いっぱい、高さを合わせて中央寄せ
+      drawW = player.width;
+      drawH = player.width / imgRatio;
+      offsetX = 0;
+      offsetY = (player.height - drawH) / 2;
+    } else {
+      // 画像の方が縦長 → 高さを枠いっぱい、幅を合わせて中央寄せ
+      drawH = player.height;
+      drawW = player.height * imgRatio;
+      offsetX = (player.width - drawW) / 2;
+      offsetY = 0;
+    }
+
+    ctx.drawImage(
+      playerImg,
+      player.x + offsetX,
+      player.y + offsetY,
+      drawW,
+      drawH
+    );
+  } else {
+    // 画像読み込み前は黄色い四角で表示（保険）
+    ctx.fillStyle = "#ffd400";
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+  }
 
   // 障害物
   obstacles.forEach(drawObstacle);
