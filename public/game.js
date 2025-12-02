@@ -22,7 +22,7 @@ fireballImg.src = "fireball.png";
 const playerImg = new Image();
 playerImg.src = "firefighter.png";
 
-// ====== ゲーム状態（resizeCanvas からも使うので先に宣言） ======
+// ====== ゲーム状態（先に宣言しておく） ======
 let player;
 let obstacles = [];
 
@@ -40,33 +40,13 @@ let spawnTimer = 0;
 let nextSpawnInterval = 0;
 
 let difficulty = 1;
+let lastTime = 0;
 
-// ----- キャンバスサイズ調整（スマホ横向き想定） -----
+// ----- キャンバスサイズ調整（縦画面・シンプル版） -----
 function resizeCanvas() {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const isPortrait = vh > vw;
-
-  let width = vw;
-  let height;
-
-  if (isPortrait) {
-    // 縦向き → 高さ控えめ＋メッセージ
-    height = vh * 0.6;
-    messageEl.textContent = "スマホは横向きにして遊んでね📱↔";
-  } else {
-    // 横向き → 画面の8割をキャンバスに
-    height = vh * 0.8;
-    if (!gameStarted && !gameOver) {
-      messageEl.textContent = "画面タップ or スペースキーでスタート＆ジャンプ！";
-    }
-  }
-
-  canvas.width = width;
-  canvas.height = height;
-
-  canvas.style.width = width + "px";
-  canvas.style.height = height + "px";
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
 }
 resizeCanvas();
 window.addEventListener("resize", resizeCanvas);
@@ -83,7 +63,7 @@ function getGroundY() {
 
 // ====== プレイヤー（消防士）初期化 ======
 function initPlayer() {
-  // 消防士のサイズ（2倍にした状態を維持）
+  // 消防士のサイズ（今まで通り大きめ）
   const size = Math.min(canvas.width, canvas.height) * 0.4;
 
   player = {
@@ -128,9 +108,7 @@ function initBackground() {
   }
 }
 
-// ====== 当たり判定（ヒットボックス） ======
-
-// プレイヤーの当たり判定（消防士の胴体寄りだけ）
+// ====== 当たり判定用ヒットボックス ======
 function getPlayerHitbox() {
   const hitWidth = player.width * 0.45;
   const hitHeight = player.height * 0.75;
@@ -146,7 +124,6 @@ function getPlayerHitbox() {
   };
 }
 
-// 障害物の当たり判定（少し小さくして理不尽さ軽減）
 function getObstacleHitbox(obs) {
   const marginX = obs.width * 0.18;
   const marginY = obs.height * 0.10;
@@ -172,32 +149,30 @@ function spawnObstacle() {
   const rawWidth = randRange(baseSize * 0.7, baseSize * 1.4);
   const rawHeight = randRange(baseSize * 0.9, baseSize * 1.8);
 
-  // 通常障害物は 4/5 サイズ → そこから 1/2
+  // 4/5 → さらに 1/2 に（大きさを抑える）
   const baseWidth = rawWidth * 0.8;
   const baseHeight = rawHeight * 0.8;
 
-  let obsWidth = baseWidth * 0.5;   // ← ここで半分
-  let obsHeight = baseHeight * 0.5; // ← ここで半分
+  let obsWidth = baseWidth * 0.5;
+  let obsHeight = baseHeight * 0.5;
 
-  // 上端は rawHeight のまま
-  let obsY = getGroundY() - rawHeight;
+  // ★「宙に浮かないように」→ すべて地面に接地させる
+  let obsY = getGroundY() - obsHeight;
 
-  // ベース速度
   const baseSpeed = randRange(260, 360);
   let obsSpeed = baseSpeed * difficulty;
 
-  // ランダム形状（火の玉あり）
   const shapeTypes = ["rect", "stair", "triangle", "dome", "pole", "image", "fireball"];
   const shape = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
 
-  // 火の玉だけ個別調整
+  // 火の玉だけ空中＆2倍サイズ
   if (shape === "fireball") {
-    const fireBase = baseSize * 1.8;  // 2倍サイズ
+    const fireBase = baseSize * 1.8;
     obsWidth = fireBase * 1.3;
     obsHeight = fireBase * 0.9;
 
-    obsY = getGroundY() - fireBase * 1.5; // 高めを飛ぶ
-    obsSpeed = obsSpeed * 1.3;            // ちょい速く
+    obsY = getGroundY() - fireBase * 1.5; // 空中を飛ぶ
+    obsSpeed = obsSpeed * 1.3;
   }
 
   obstacles.push({
@@ -230,6 +205,7 @@ function resetGame() {
 
   currentTimeEl.textContent = "0.00";
   bestTimeEl.textContent = bestTime.toFixed(2);
+  messageEl.textContent = "画面タップ or スペースキーでスタート＆ジャンプ！";
 }
 
 // 初期化
@@ -264,9 +240,7 @@ canvas.addEventListener("pointerdown", (e) => {
   handleJump();
 });
 
-// ====== メインループ ======
-let lastTime = 0;
-
+// ====== 更新処理 ======
 function update(delta) {
   if (!gameStarted || gameOver) return;
 
@@ -332,7 +306,7 @@ function update(delta) {
 // ====== 障害物描画 ======
 function drawObstacle(obs) {
   // 火の玉
-  if (obs.shape === "fireball" && fireballImg.complete) {
+  if (obs.shape === "fireball" && fireballImg.complete && fireballImg.naturalWidth > 0) {
     ctx.save();
     ctx.translate(obs.x + obs.width / 2, obs.y + obs.height / 2);
     ctx.rotate((-15 * Math.PI) / 180);
@@ -342,7 +316,7 @@ function drawObstacle(obs) {
   }
 
   // 社長イラスト障害物
-  if (obs.shape === "image" && obstacleCustomImg.complete) {
+  if (obs.shape === "image" && obstacleCustomImg.complete && obstacleCustomImg.naturalWidth > 0) {
     ctx.drawImage(obstacleCustomImg, obs.x, obs.y, obs.width, obs.height);
     return;
   }
@@ -423,7 +397,7 @@ function draw() {
   ctx.fillRect(0, groundY, canvas.width, 40);
 
   // プレイヤー（消防士）
-  if (playerImg.complete) {
+  if (playerImg.complete && playerImg.naturalWidth > 0) {
     ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
   } else {
     ctx.fillStyle = "#ffd400";
@@ -464,6 +438,7 @@ function draw() {
   }
 }
 
+// ====== ループ ======
 function loop(timestamp) {
   const delta = (timestamp - lastTime) / 1000 || 0;
   lastTime = timestamp;
@@ -473,7 +448,6 @@ function loop(timestamp) {
 
   requestAnimationFrame(loop);
 }
-
 requestAnimationFrame(loop);
 
 // ====== ゲームオーバー ======
