@@ -39,7 +39,6 @@ const playerImg = new Image();
 playerImg.src = "firefighter.png";
 
 // ====== 定数 & 状態 ======
-const RANKING_KEY = "runGame_ranking"; // [{name, time}] を保存
 let player;
 let obstacles = [];
 
@@ -51,6 +50,8 @@ let gameOver = false;
 
 let startTime = 0;
 let currentTime = 0;
+
+// 端末ローカルのベストタイム（これはそのまま残す）
 let bestTime = parseFloat(localStorage.getItem("bestTime_runGame") || "0");
 
 let spawnTimer = 0;
@@ -59,6 +60,7 @@ let nextSpawnInterval = 0;
 let difficulty = 1;
 let lastTime = 0;
 
+// プレイヤー名（ログイン）
 let playerName = localStorage.getItem("playerName") || "";
 
 // ====== 共通関数 ======
@@ -95,30 +97,48 @@ function updateLoginUI() {
   }
 }
 
-// ====== ランキング関連 ======
-function loadRanking() {
+// ====== サーバーからランキングを取得 ======
+async function fetchRanking() {
   try {
-    const raw = localStorage.getItem(RANKING_KEY);
-    if (!raw) return [];
-    const list = JSON.parse(raw);
-    if (!Array.isArray(list)) return [];
-    return list;
-  } catch {
-    return [];
+    const res = await fetch("/api/ranking");
+    if (!res.ok) throw new Error("ranking fetch failed");
+    const list = await res.json();
+    renderRanking(list);
+  } catch (e) {
+    console.error(e);
+    rankingBody.innerHTML = "";
+    rankingEmpty.textContent = "ランキングの取得に失敗しました…時間をおいて再度お試しください。";
+    rankingEmpty.style.display = "block";
   }
 }
 
-function saveRanking(list) {
-  localStorage.setItem(RANKING_KEY, JSON.stringify(list));
+// スコア送信 → サーバーランキング更新
+async function submitScoreToServer() {
+  if (!playerName) return;
+
+  try {
+    const res = await fetch("/api/score", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: playerName, time: currentTime }),
+    });
+
+    if (!res.ok) throw new Error("score post failed");
+    const list = await res.json();
+    renderRanking(list);
+  } catch (e) {
+    console.error("submitScore error:", e);
+  }
 }
 
-function renderRanking() {
-  const list = loadRanking().sort((a, b) => b.time - a.time).slice(0, 3);
-
+// ====== ランキング描画 ======
+function renderRanking(list) {
   rankingBody.innerHTML = "";
 
-  if (list.length === 0) {
+  if (!list || list.length === 0) {
     rankingEmpty.style.display = "block";
+    rankingEmpty.textContent =
+      "まだ記録がありません。まずはゲームをプレイしてみよう！";
     return;
   }
   rankingEmpty.style.display = "none";
@@ -142,26 +162,6 @@ function renderRanking() {
   });
 }
 
-function updateRankingAfterGame() {
-  if (!playerName) return;
-
-  let list = loadRanking();
-  const idx = list.findIndex((e) => e.name === playerName);
-
-  if (idx >= 0) {
-    if (bestTime > list[idx].time) {
-      list[idx].time = bestTime;
-    }
-  } else {
-    list.push({ name: playerName, time: bestTime });
-  }
-
-  list.sort((a, b) => b.time - a.time);
-  list = list.slice(0, 3);
-  saveRanking(list);
-  renderRanking();
-}
-
 // ====== プレイヤー初期化 ======
 function initPlayer() {
   const size = Math.min(canvas.width, canvas.height) * 0.4;
@@ -176,7 +176,7 @@ function initPlayer() {
     jumpPower: -600,
     onGround: true,
     maxJumps: 3,
-    jumpCount: 0
+    jumpCount: 0,
   };
 }
 
@@ -214,7 +214,7 @@ function getPlayerHitbox() {
     x: player.x + offsetX,
     y: player.y + offsetY,
     width: hitWidth,
-    height: hitHeight
+    height: hitHeight,
   };
 }
 
@@ -225,7 +225,7 @@ function getObstacleHitbox(obs) {
     x: obs.x + marginX,
     y: obs.y + marginY,
     width: obs.width - marginX * 2,
-    height: obs.height - marginY * 2
+    height: obs.height - marginY * 2,
   };
 }
 
@@ -247,13 +247,21 @@ function spawnObstacle() {
   let obsWidth = baseWidth * 0.5;
   let obsHeight = baseHeight * 0.5;
 
-  // 地面に接地
+  // 通常は地面に接地
   let obsY = getGroundY() - obsHeight;
 
   const baseSpeed = randRange(260, 360);
   let obsSpeed = baseSpeed * difficulty;
 
-  const shapeTypes = ["rect", "stair", "triangle", "dome", "pole", "image", "fireball"];
+  const shapeTypes = [
+    "rect",
+    "stair",
+    "triangle",
+    "dome",
+    "pole",
+    "image",
+    "fireball",
+  ];
   const shape = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
 
   if (shape === "fireball") {
@@ -270,7 +278,7 @@ function spawnObstacle() {
     width: obsWidth,
     height: obsHeight,
     speed: obsSpeed,
-    shape
+    shape,
   });
 
   resetSpawnTimer();
@@ -297,41 +305,6 @@ function resetGame() {
 
   updateLoginUI();
 }
-
-// ====== ログイン処理 ======
-loginBtn.addEventListener("click", () => {
-  const name = nameInput.value.trim();
-  if (!name) {
-    alert("なまえを入力してね！");
-    return;
-  }
-  playerName = name;
-  localStorage.setItem("playerName", playerName);
-  updateLoginUI();
-});
-
-logoutBtn.addEventListener("click", () => {
-  localStorage.removeItem("playerName");
-  playerName = "";
-  resetGame();
-});
-
-// ====== 画面切り替え ======
-goGameBtn.addEventListener("click", () => {
-  screenRanking.hidden = true;
-  screenGame.hidden = false;
-  resizeCanvas(); // 表示後にサイズ再計算
-  resetGame();
-});
-
-backRankingBtn.addEventListener("click", () => {
-  screenGame.hidden = true;
-  screenRanking.hidden = false;
-  gameStarted = false;
-  gameOver = false;
-  messageEl.textContent = "";
-  renderRanking();
-});
 
 // ====== 入力 ======
 function handleJump() {
@@ -432,11 +405,21 @@ function update(delta) {
 
 // ====== 障害物描画 ======
 function drawObstacle(obs) {
-  if (obs.shape === "fireball" && fireballImg.complete && fireballImg.naturalWidth > 0) {
+  if (
+    obs.shape === "fireball" &&
+    fireballImg.complete &&
+    fireballImg.naturalWidth > 0
+  ) {
     ctx.save();
     ctx.translate(obs.x + obs.width / 2, obs.y + obs.height / 2);
     ctx.rotate((-15 * Math.PI) / 180);
-    ctx.drawImage(fireballImg, -obs.width / 2, -obs.height / 2, obs.width, obs.height);
+    ctx.drawImage(
+      fireballImg,
+      -obs.width / 2,
+      -obs.height / 2,
+      obs.width,
+      obs.height
+    );
     ctx.restore();
     return;
   }
@@ -503,10 +486,10 @@ function draw() {
   ctx.fillStyle = "#6ec9ff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
   bgFarBlocks.forEach((b) => ctx.fillRect(b.x, b.y, b.width, b.height));
 
-  ctx.fillStyle = "rgba(255,255,255,0.7)";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
   bgNearBlocks.forEach((b) => ctx.fillRect(b.x, b.y, b.width, b.height));
 
   const groundY = getGroundY();
@@ -558,7 +541,7 @@ function draw() {
   }
 }
 
-// ====== ループ開始 ======
+// ====== メインループ ======
 function loop(timestamp) {
   const delta = (timestamp - lastTime) / 1000 || 0;
   lastTime = timestamp;
@@ -566,12 +549,6 @@ function loop(timestamp) {
   draw();
   requestAnimationFrame(loop);
 }
-
-// 初期化
-resizeCanvas();
-resetGame();
-renderRanking();
-requestAnimationFrame(loop);
 
 // ====== ゲームオーバー ======
 function endGame() {
@@ -586,9 +563,50 @@ function endGame() {
   bestTimeEl.textContent = bestTime.toFixed(2);
   messageEl.textContent = `ゲームオーバー！ 走行タイム：${currentTime.toFixed(2)} 秒`;
 
-  // ランキング更新
-  updateRankingAfterGame();
+  // スコアをサーバーに送信してグローバルランキング更新
+  submitScoreToServer();
 }
 
 // ====== リスタート ======
 restartBtn.addEventListener("click", resetGame);
+
+// ====== 画面切り替え ======
+goGameBtn.addEventListener("click", () => {
+  screenRanking.hidden = true;
+  screenGame.hidden = false;
+  resizeCanvas();
+  resetGame();
+});
+
+backRankingBtn.addEventListener("click", () => {
+  screenGame.hidden = true;
+  screenRanking.hidden = false;
+  gameStarted = false;
+  gameOver = false;
+  messageEl.textContent = "";
+  fetchRanking();
+});
+
+// ====== ログイン処理 ======
+loginBtn.addEventListener("click", () => {
+  const name = nameInput.value.trim();
+  if (!name) {
+    alert("なまえを入力してね！");
+    return;
+  }
+  playerName = name;
+  localStorage.setItem("playerName", playerName);
+  updateLoginUI();
+});
+
+logoutBtn.addEventListener("click", () => {
+  localStorage.removeItem("playerName");
+  playerName = "";
+  resetGame();
+});
+
+// ====== 初期化 ======
+resizeCanvas();
+resetGame();
+fetchRanking();
+requestAnimationFrame(loop);
