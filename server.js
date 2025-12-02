@@ -1,10 +1,14 @@
-// server.js （run-game 用）
-
-const express = require("express");
-const path = require("path");
+// server.js （run-game グローバルランキング用・ESM版）
+import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// ESM で __dirname を使えるようにするおまじない
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // JSON を受け取る設定
 app.use(express.json());
@@ -33,7 +37,7 @@ app.post("/api/score", (req, res) => {
     typeof name !== "string" ||
     !name.trim() ||
     typeof time !== "number" ||
-    !isFinite(time)
+    !Number.isFinite(time)
   ) {
     return res.status(400).json({ error: "invalid payload" });
   }
@@ -58,7 +62,7 @@ app.post("/api/score", (req, res) => {
   res.json(top);
 });
 
-// それ以外のリクエストは index.html を返す（PWA対応しやすくするため）
+// それ以外のリクエストは index.html を返す（SPA / PWA 用）
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
