@@ -13,6 +13,10 @@ const restartBtn = document.getElementById("restart-btn");
 // ★ 社長イラスト障害物（obstacle_custom.png を public に置く）
 const obstacleCustomImg = new Image();
 obstacleCustomImg.src = "obstacle_custom.png";
+// 火の玉画像
+const fireballImg = new Image();
+fireballImg.src = "fireball.png";
+
 
 // ----- キャンバスのサイズ調整 -----
 function resizeCanvas() {
@@ -128,11 +132,11 @@ function resetSpawnTimer() {
 function spawnObstacle() {
   const baseSize = player.height;
 
-  // 元サイズ
+  // 元のサイズ
   const rawWidth = randRange(baseSize * 0.7, baseSize * 1.4);
   const rawHeight = randRange(baseSize * 0.9, baseSize * 1.8);
 
-  // 4/5 サイズに縮小
+  // 4/5 に縮小（前の設定そのまま）
   const width = rawWidth * 0.8;
   const height = rawHeight * 0.8;
 
@@ -143,21 +147,36 @@ function spawnObstacle() {
   const baseSpeed = randRange(260, 360);
   const speed = baseSpeed * difficulty;
 
-  // ★ 障害物のタイプをランダムに
-  const shapeTypes = ["rect", "stair", "triangle", "dome", "pole", "image"];
+  // ★ 形の種類に fireball を追加
+  //   火の玉は他より少し速め＆少し高い位置から飛んでくる
+  const shapeTypes = ["rect", "stair", "triangle", "dome", "pole", "image", "fireball"];
   const shape = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
+
+  let obsY = topY;
+  let obsWidth = width;
+  let obsHeight = height;
+  let obsSpeed = speed;
+
+  if (shape === "fireball") {
+    // 火の玉用の調整
+    obsHeight = baseSize * 0.9;
+    obsWidth = baseSize * 1.2;
+    obsY = getGroundY() - baseSize * 1.4; // 地面より少し高めを飛ぶ
+    obsSpeed = speed * 1.3;               // 他よりちょっと速い
+  }
 
   obstacles.push({
     x: canvas.width + 20,
-    y: topY,
-    width,
-    height,
-    speed,
+    y: obsY,
+    width: obsWidth,
+    height: obsHeight,
+    speed: obsSpeed,
     shape
   });
 
   resetSpawnTimer();
 }
+
 
 // ====== ゲームリセット ======
 function resetGame() {
@@ -286,15 +305,35 @@ function update(delta) {
   }
 }
 
-// ====== 障害物の描画 ======
 function drawObstacle(obs) {
-  // 社長イラスト障害物
-  if (obs.shape === "image") {
-    if (obstacleCustomImg.complete && obstacleCustomImg.naturalWidth > 0) {
-      ctx.drawImage(obstacleCustomImg, obs.x, obs.y, obs.width, obs.height);
+  // 火の玉
+  if (obs.shape === "fireball") {
+    if (fireballImg.complete && fireballImg.naturalWidth > 0) {
+      ctx.save();
+      // 少し傾けて飛んでいる感じにする
+      ctx.translate(obs.x + obs.width / 2, obs.y + obs.height / 2);
+      ctx.rotate((-15 * Math.PI) / 180);
+      ctx.drawImage(
+        fireballImg,
+        -obs.width / 2,
+        -obs.height / 2,
+        obs.width,
+        obs.height
+      );
+      ctx.restore();
       return;
     }
-    // 読み込み前は普通の四角
+    // 読み込み前は普通の四角で代用
+  }
+
+  // 社長イラスト障害物（前のまま）
+  if (
+    obs.shape === "image" &&
+    obstacleCustomImg.complete &&
+    obstacleCustomImg.naturalWidth > 0
+  ) {
+    ctx.drawImage(obstacleCustomImg, obs.x, obs.y, obs.width, obs.height);
+    return;
   }
 
   ctx.fillStyle = "#555";
@@ -304,6 +343,7 @@ function drawObstacle(obs) {
       const steps = 3;
       const stepWidth = obs.width / steps;
       const stepHeight = obs.height / steps;
+
       for (let i = 0; i < steps; i++) {
         const w = stepWidth * (i + 1);
         const h = stepHeight * (i + 1);
@@ -326,10 +366,8 @@ function drawObstacle(obs) {
       const baseHeight = obs.height * 0.35;
       const domeHeight = obs.height - baseHeight;
 
-      // 土台
       ctx.fillRect(obs.x, obs.y + domeHeight, obs.width, baseHeight);
 
-      // ドーム
       const cx = obs.x + obs.width / 2;
       const cy = obs.y + domeHeight;
       const radius = Math.min(obs.width, domeHeight * 2) / 2;
@@ -343,6 +381,7 @@ function drawObstacle(obs) {
     case "pole": {
       const poleWidth = obs.width * 0.3;
       const x = obs.x + (obs.width - poleWidth) / 2;
+
       ctx.fillRect(x, obs.y, poleWidth, obs.height);
 
       const barHeight = obs.height * 0.1;
@@ -356,6 +395,7 @@ function drawObstacle(obs) {
     }
   }
 }
+
 
 // ====== 描画処理 ======
 function draw() {
