@@ -1,94 +1,146 @@
 // ====== 暇つぶしランゲーム game.js ======
 "use strict";
 
-// ====== 画面の要素 ======
+// ---------- 画面要素 ----------
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-
-const startBtn = document.getElementById("start-btn");
-const restartBtn = document.getElementById("restart-btn");
-const usernameInput = document.getElementById("username-input");
-const rankingBody = document.getElementById("ranking-body");
-const hud = document.getElementById("hud");
 
 const currentTimeEl = document.getElementById("current-time");
 const bestTimeEl = document.getElementById("best-time");
 const messageEl = document.getElementById("message");
+const restartBtn = document.getElementById("restart-btn");
 
-// ====== 音 ======
-const bgmHome = document.getElementById("bgm-home");
-const bgmGame = document.getElementById("bgm-game");
-const seJump = document.getElementById("se-jump");
-const seGameover = document.getElementById("se-gameover");
-const bgmToggleBtn = document.getElementById("bgm-toggle");
+// ランキング画面まわり
+const viewRanking = document.getElementById("view-ranking");
+const viewGame = document.getElementById("view-game");
+const rankingBody = document.getElementById("ranking-body");
+const usernameInput = document.getElementById("username-input");
+const startBtn = document.getElementById("start-btn");
 
-let bgmEnabled = true;
-
-// ====== プレイヤー画像 ======
-const playerImg = new Image();
-playerImg.src = "firefighter.png";
-
-// 障害物用
+// ---------- 画像 ----------
 const obstacleCustomImg = new Image();
 obstacleCustomImg.src = "obstacle_custom.png";
 
 const fireballImg = new Image();
 fireballImg.src = "fireball.png";
 
-// ====== キャンバス調整（縦画面固定） ======
-function resizeCanvas() {
-  canvas.width = window.innerWidth * 0.95;
-  canvas.height = window.innerHeight * 0.55;
-}
-resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
+const playerImg = new Image();
+playerImg.src = "firefighter.png";
 
-// ====== ランダム ======
+// ---------- BGM / SE ----------
+const bgmHome = document.getElementById("bgm-home");
+const bgmGame = document.getElementById("bgm-game");
+const seJump = document.getElementById("se-jump");
+const seGameover = document.getElementById("se-gameover");
+
+function safePlay(audio, label) {
+  if (!audio) {
+    console.log("audio not found:", label);
+    return;
+  }
+  try {
+    audio.currentTime = 0;
+    const p = audio.play();
+    if (p && p.catch) {
+      p.catch((err) => {
+        console.log("audio play error:", label, err);
+      });
+    }
+  } catch (e) {
+    console.log("audio error:", label, e);
+  }
+}
+
+function stopAllBgm() {
+  [bgmHome, bgmGame].forEach((a) => {
+    if (!a) return;
+    a.pause();
+  });
+}
+
+function playHomeBgm() {
+  stopAllBgm();
+  safePlay(bgmHome, "bgm-home");
+}
+
+function playGameBgm() {
+  stopAllBgm();
+  safePlay(bgmGame, "bgm-game");
+}
+
+function playJumpSe() {
+  safePlay(seJump, "se-jump");
+}
+
+function playGameoverSe() {
+  safePlay(seGameover, "se-gameover");
+}
+
+// 最初のユーザー操作でホームBGMを解禁
+let audioUnlocked = false;
+function setupAudioUnlock() {
+  const unlock = () => {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    playHomeBgm();
+    window.removeEventListener("pointerdown", unlock);
+    window.removeEventListener("keydown", unlock);
+  };
+  window.addEventListener("pointerdown", unlock);
+  window.addEventListener("keydown", unlock);
+}
+setupAudioUnlock();
+
+// ---------- ユーティリティ ----------
 function randRange(min, max) {
   return Math.random() * (max - min) + min;
 }
 
-// ====== ゲーム変数 ======
+function getGroundY() {
+  return canvas.height - 10;
+}
+
+// ---------- キャンバスサイズ ----------
+function resizeCanvas() {
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+}
+resizeCanvas();
+window.addEventListener("resize", () => {
+  resizeCanvas();
+  // リサイズしてもプレイヤーが地面にいるように補正
+  if (player) {
+    player.y = getGroundY() - player.height;
+  }
+});
+
+// ---------- ゲーム状態 ----------
 let player;
 let obstacles = [];
-let bgFar = [];
-let bgNear = [];
+let bgFarBlocks = [];
+let bgNearBlocks = [];
 
 let gameStarted = false;
 let gameOver = false;
 
 let startTime = 0;
 let currentTime = 0;
-let bestTime = 0;
+let bestTime = parseFloat(localStorage.getItem("bestTime_runGame") || "0");
+
+let spawnTimer = 0;
+let nextSpawnInterval = 0;
 
 let difficulty = 1;
 
-let spawnTimer = 0;
-let nextSpawn = 0;
+let currentUsername = "";
 
-// ====== 音制御 ======
-function stopAllBgm() {
-  bgmHome.pause();
-  bgmGame.pause();
-}
-function playHomeBgm() {
-  if (!bgmEnabled) return;
-  stopAllBgm();
-  bgmHome.currentTime = 0;
-  bgmHome.play().catch(() => {});
-}
-function playGameBgm() {
-  if (!bgmEnabled) return;
-  stopAllBgm();
-  bgmGame.currentTime = 0;
-  bgmGame.play().catch(() => {});
-}
-
-// ====== プレイヤー作成 ======
+// ---------- プレイヤー ----------
 function initPlayer() {
-  const size = Math.min(canvas.width, canvas.height) * 0.35;
+  const size = Math.min(canvas.width, canvas.height) * 0.4; // 消防士サイズ
+
   player = {
-    x: canvas.width * 0.15,
+    x: canvas.width * 0.2,
     y: getGroundY() - size,
     width: size,
     height: size,
@@ -96,105 +148,111 @@ function initPlayer() {
     gravity: 1600,
     jumpPower: -600,
     onGround: true,
-    jumpCount: 0,
-    maxJumps: 3
+    maxJumps: 3,
+    jumpCount: 0
   };
 }
 
-// ====== 地面位置 ======
-function getGroundY() {
-  return canvas.height - 12;
+// プレイヤーのヒットボックス（胴体中心だけにする）
+function getPlayerHitbox() {
+  const hitWidth = player.width * 0.45;
+  const hitHeight = player.height * 0.75;
+  const offsetX = (player.width - hitWidth) / 2;
+  const offsetY = (player.height - hitHeight) / 2;
+
+  return {
+    x: player.x + offsetX,
+    y: player.y + offsetY,
+    width: hitWidth,
+    height: hitHeight
+  };
 }
 
-// ====== 背景生成 ======
+// ---------- 背景 ----------
 function initBackground() {
-  bgFar = [];
-  bgNear = [];
-  const g = getGroundY();
+  bgFarBlocks = [];
+  bgNearBlocks = [];
 
+  const groundY = getGroundY();
+
+  // 遠景
   for (let i = 0; i < 10; i++) {
-    bgFar.push({
-      x: i * 200,
-      y: g - 200,
-      width: 160,
-      height: 100,
-      speed: 40
-    });
-    bgNear.push({
-      x: i * 150,
-      y: g - 120,
-      width: 120,
-      height: 70,
-      speed: 80
-    });
+    const w = 180;
+    const h = canvas.height * randRange(0.15, 0.28);
+    const x = i * 180;
+    const y = groundY - canvas.height * 0.55 - h;
+    bgFarBlocks.push({ x, y, width: w, height: h, speed: 40 });
+  }
+
+  // 近景
+  for (let i = 0; i < 10; i++) {
+    const w = 120;
+    const h = canvas.height * randRange(0.18, 0.25);
+    const x = i * 160 + 40;
+    const y = groundY - canvas.height * 0.35 - h;
+    bgNearBlocks.push({ x, y, width: w, height: h, speed: 100 });
   }
 }
 
-// ====== 当たり判定ヒットボックス ======
-function getPlayerHitbox() {
+// ---------- 障害物 ----------
+function getObstacleHitbox(obs) {
+  const marginX = obs.width * 0.18;
+  const marginY = obs.height * 0.1;
+
   return {
-    x: player.x + player.width * 0.25,
-    y: player.y + player.height * 0.18,
-    width: player.width * 0.5,
-    height: player.height * 0.65
-  };
-}
-function getObstacleHitbox(o) {
-  return {
-    x: o.x + o.width * 0.15,
-    y: o.y + o.height * 0.15,
-    width: o.width * 0.7,
-    height: o.height * 0.7
+    x: obs.x + marginX,
+    y: obs.y + marginY,
+    width: obs.width - marginX * 2,
+    height: obs.height - marginY * 2
   };
 }
 
-// ====== 障害物生成 ======
-function resetSpawn() {
-  nextSpawn = randRange(800, 1500);
+function resetSpawnTimer() {
+  nextSpawnInterval = randRange(900, 1600);
   spawnTimer = 0;
 }
 
 function spawnObstacle() {
-  const base = player.height;
+  const baseSize = player.height;
 
-  const rawW = randRange(base * 0.6, base * 1.2);
-  const rawH = randRange(base * 0.7, base * 1.5);
+  const rawWidth = randRange(baseSize * 0.7, baseSize * 1.4);
+  const rawHeight = randRange(baseSize * 0.9, baseSize * 1.8);
 
-  // ★ 通常障害物は 1/2 サイズ（浮かない）
-  let w = rawW * 0.5;
-  let h = rawH * 0.5;
-  let y = getGroundY() - h;
+  // 「以前の障害物の半分くらい」にする
+  let obsWidth = rawWidth * 0.4;
+  let obsHeight = rawHeight * 0.4;
 
-  let s = randRange(260, 360) * difficulty;
+  let obsY = getGroundY() - obsHeight; // 地面に接する
+  const baseSpeed = randRange(260, 360);
+  let obsSpeed = baseSpeed * difficulty;
 
-  const shapes = ["rect", "stair", "triangle", "dome", "pole", "image", "fireball"];
-  const shape = shapes[(Math.random() * shapes.length) | 0];
+  const shapeTypes = ["rect", "stair", "triangle", "dome", "pole", "image", "fireball"];
+  const shape = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
 
   if (shape === "fireball") {
-    const f = base * 1.6;
-    w = f * 1.2;
-    h = f * 0.8;
-    y = getGroundY() - h * 1.3;
-    s *= 1.3;
+    // 火の玉だけ別サイズ（2倍）
+    const fireBase = baseSize * 1.8;
+    obsWidth = fireBase * 1.3;
+    obsHeight = fireBase * 0.9;
+    obsY = getGroundY() - fireBase * 1.5; // 少し上を飛ぶ
+    obsSpeed = obsSpeed * 1.3;
   }
 
   obstacles.push({
     x: canvas.width + 20,
-    y,
-    width: w,
-    height: h,
-    speed: s,
+    y: obsY,
+    width: obsWidth,
+    height: obsHeight,
+    speed: obsSpeed,
     shape
   });
 
-  resetSpawn();
+  resetSpawnTimer();
 }
 
-// ====== ゲームリセット ======
+// ---------- ゲームリセット ----------
 function resetGame() {
-  canvas.style.display = "block";
-  hud.style.display = "flex";
-
+  resizeCanvas();
   initPlayer();
   initBackground();
   obstacles = [];
@@ -202,244 +260,380 @@ function resetGame() {
   gameStarted = false;
   gameOver = false;
   currentTime = 0;
+  spawnTimer = 0;
   difficulty = 1;
 
-  resetSpawn();
+  resetSpawnTimer();
 
   currentTimeEl.textContent = "0.00";
-
-  playGameBgm();
+  bestTimeEl.textContent = bestTime.toFixed(2);
+  messageEl.textContent = "画面タップ or スペースキーでスタート＆ジャンプ！";
 }
 
-// ====== 入力 ======
+// ---------- 入力 ----------
 function handleJump() {
   if (!gameStarted) {
     gameStarted = true;
     startTime = performance.now();
+    messageEl.textContent = "";
+    // ゲーム開始 BGM に切り替え
+    playGameBgm();
   }
 
   if (gameOver) return;
+
   if (player.jumpCount < player.maxJumps) {
     player.vy = player.jumpPower;
     player.onGround = false;
     player.jumpCount++;
-    seJump.currentTime = 0;
-    seJump.play().catch(() => {});
+    playJumpSe();
   }
 }
 
-window.addEventListener("keydown", e => {
+window.addEventListener("keydown", (e) => {
   if (e.code === "Space") {
     e.preventDefault();
     handleJump();
   }
 });
-canvas.addEventListener("pointerdown", handleJump);
 
-// ====== メインループ ======
-let last = 0;
-function update(dt) {
+canvas.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  handleJump();
+});
+
+// ---------- メインループ ----------
+let lastTime = 0;
+
+function update(delta) {
   if (!gameStarted || gameOver) return;
 
-  currentTime = (performance.now() - startTime) / 1000;
+  const now = performance.now();
+  currentTime = (now - startTime) / 1000;
   currentTimeEl.textContent = currentTime.toFixed(2);
+
   difficulty = 1 + currentTime * 0.03;
 
-  // プレイヤー物理
-  player.vy += player.gravity * dt;
-  player.y += player.vy * dt;
+  // プレイヤー
+  player.vy += player.gravity * delta;
+  player.y += player.vy * delta;
 
-  const g = getGroundY() - player.height;
-  if (player.y >= g) {
-    player.y = g;
+  const groundY = getGroundY() - player.height;
+  if (player.y >= groundY) {
+    player.y = groundY;
     player.vy = 0;
-    player.onGround = true;
-    player.jumpCount = 0;
+    if (!player.onGround) {
+      player.onGround = true;
+      player.jumpCount = 0;
+    }
   }
 
   // 背景
-  bgFar.forEach(b => {
-    b.x -= b.speed * dt * difficulty * 0.5;
-    if (b.x + b.width < 0) b.x = canvas.width;
+  bgFarBlocks.forEach((b) => {
+    b.x -= b.speed * delta * difficulty * 0.6;
+    if (b.x + b.width < 0) b.x = canvas.width + randRange(20, 120);
   });
-  bgNear.forEach(b => {
-    b.x -= b.speed * dt * difficulty;
-    if (b.x + b.width < 0) b.x = canvas.width;
+
+  bgNearBlocks.forEach((b) => {
+    b.x -= b.speed * delta * difficulty;
+    if (b.x + b.width < 0) b.x = canvas.width + randRange(40, 160);
   });
 
   // 障害物
-  spawnTimer += dt * 1000;
-  if (spawnTimer >= nextSpawn) spawnObstacle();
+  spawnTimer += delta * 1000;
+  if (spawnTimer >= nextSpawnInterval) spawnObstacle();
 
-  obstacles.forEach(o => (o.x -= o.speed * dt));
-  obstacles = obstacles.filter(o => o.x + o.width > 0);
+  obstacles.forEach((obs) => {
+    obs.x -= obs.speed * delta;
+  });
+  obstacles = obstacles.filter((obs) => obs.x + obs.width > 0);
 
-  // 判定
+  // 当たり判定
   const p = getPlayerHitbox();
-  for (const o of obstacles) {
-    const h = getObstacleHitbox(o);
+  for (const obs of obstacles) {
+    const o = getObstacleHitbox(obs);
     if (
-      p.x < h.x + h.width &&
-      p.x + p.width > h.x &&
-      p.y < h.y + h.height &&
-      p.y + p.height > h.y
+      p.x < o.x + o.width &&
+      p.x + p.width > o.x &&
+      p.y < o.y + o.height &&
+      p.y + p.height > o.y
     ) {
-      return endGame();
+      endGame();
+      break;
     }
   }
 }
 
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+// ---------- 障害物描画 ----------
+function drawObstacle(obs) {
+  // 火の玉
+  if (obs.shape === "fireball" && fireballImg.complete) {
+    ctx.save();
+    ctx.translate(obs.x + obs.width / 2, obs.y + obs.height / 2);
+    ctx.rotate((-15 * Math.PI) / 180);
+    ctx.drawImage(
+      fireballImg,
+      -obs.width / 2,
+      -obs.height / 2,
+      obs.width,
+      obs.height
+    );
+    ctx.restore();
+    return;
+  }
 
+  // 社長イラスト
+  if (obs.shape === "image" && obstacleCustomImg.complete) {
+    ctx.drawImage(obstacleCustomImg, obs.x, obs.y, obs.width, obs.height);
+    return;
+  }
+
+  // その他
+  ctx.fillStyle = "#555";
+
+  switch (obs.shape) {
+    case "stair": {
+      const steps = 3;
+      for (let i = 0; i < steps; i++) {
+        const w = (obs.width / steps) * (i + 1);
+        const h = (obs.height / steps) * (i + 1);
+        const x = obs.x + obs.width - w;
+        const y = obs.y + obs.height - h;
+        ctx.fillRect(x, y, w, h);
+      }
+      break;
+    }
+    case "triangle": {
+      ctx.beginPath();
+      ctx.moveTo(obs.x, obs.y + obs.height);
+      ctx.lineTo(obs.x + obs.width / 2, obs.y);
+      ctx.lineTo(obs.x + obs.width, obs.y + obs.height);
+      ctx.fill();
+      break;
+    }
+    case "dome": {
+      const baseH = obs.height * 0.35;
+      const domeH = obs.height - baseH;
+      ctx.fillRect(obs.x, obs.y + domeH, obs.width, baseH);
+
+      const cx = obs.x + obs.width / 2;
+      const cy = obs.y + domeH;
+      const r = Math.min(obs.width, domeH * 2) / 2;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, Math.PI, 0);
+      ctx.fill();
+      break;
+    }
+    case "pole": {
+      const pw = obs.width * 0.3;
+      const px = obs.x + (obs.width - pw) / 2;
+      ctx.fillRect(px, obs.y, pw, obs.height);
+      ctx.fillRect(px - pw, obs.y, pw * 3, obs.height * 0.1);
+      break;
+    }
+    default:
+      ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+  }
+}
+
+// ---------- 描画 ----------
+function draw() {
   // 空
   ctx.fillStyle = "#6ec9ff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 背景
+  // 遠景
   ctx.fillStyle = "rgba(255,255,255,0.35)";
-  bgFar.forEach(b => ctx.fillRect(b.x, b.y, b.width, b.height));
+  bgFarBlocks.forEach((b) => ctx.fillRect(b.x, b.y, b.width, b.height));
+
+  // 近景
   ctx.fillStyle = "rgba(255,255,255,0.7)";
-  bgNear.forEach(b => ctx.fillRect(b.x, b.y, b.width, b.height));
+  bgNearBlocks.forEach((b) => ctx.fillRect(b.x, b.y, b.width, b.height));
 
   // 地面
-  const gy = getGroundY();
-  ctx.fillStyle = "#666";
-  ctx.fillRect(0, gy, canvas.width, 2);
+  const groundY = getGroundY();
+  ctx.strokeStyle = "#666";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, groundY);
+  ctx.lineTo(canvas.width, groundY);
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(0,0,0,0.05)";
+  ctx.fillRect(0, groundY, canvas.width, 40);
 
   // プレイヤー
   if (playerImg.complete) {
     ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
   } else {
-    ctx.fillStyle = "yellow";
+    ctx.fillStyle = "#ffd400";
     ctx.fillRect(player.x, player.y, player.width, player.height);
   }
 
   // 障害物
-  obstacles.forEach(o => {
-    if (o.shape === "fireball" && fireballImg.complete) {
-      ctx.save();
-      ctx.translate(o.x + o.width / 2, o.y + o.height / 2);
-      ctx.rotate(-0.25);
-      ctx.drawImage(fireballImg, -o.width / 2, -o.height / 2, o.width, o.height);
-      ctx.restore();
-      return;
-    }
+  obstacles.forEach(drawObstacle);
 
-    if (o.shape === "image" && obstacleCustomImg.complete) {
-      ctx.drawImage(obstacleCustomImg, o.x, o.y, o.width, o.height);
-      return;
-    }
-
-    ctx.fillStyle = "#444";
-    ctx.fillRect(o.x, o.y, o.width, o.height);
-  });
-
-  // GAME OVER
+  // GAME OVER オーバーレイ
   if (gameOver) {
+    ctx.save();
+
     ctx.fillStyle = "rgba(0,0,0,0.4)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const r = Math.min(canvas.width, canvas.height) * 0.22;
+
+    ctx.beginPath();
     ctx.fillStyle = "#fff";
-    ctx.font = "40px sans-serif";
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "#ff5252";
+    ctx.lineWidth = r * 0.12;
+    ctx.stroke();
+
+    ctx.fillStyle = "#ff5252";
     ctx.textAlign = "center";
-    ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2);
+    ctx.textBaseline = "middle";
+    ctx.font = `${r * 0.45}px "Segoe UI", sans-serif`;
+    ctx.fillText("GAME", cx, cy - r * 0.25);
+    ctx.fillText("OVER!!", cx, cy + r * 0.15);
+
+    ctx.restore();
   }
 }
 
-function loop(t) {
-  const dt = (t - last) / 1000;
-  last = t;
+function loop(timestamp) {
+  const delta = (timestamp - lastTime) / 1000 || 0;
+  lastTime = timestamp;
 
-  update(dt);
+  update(delta);
   draw();
 
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 
-// ====== GAME OVER ======
-function endGame() {
-  if (gameOver) return;
-  gameOver = true;
-
-  seGameover.currentTime = 0;
-  seGameover.play().catch(() => {});
-  stopAllBgm();
-
-  // スコア送信
-  submitScore();
-}
-
-// ====== ランキング関連 ======
+// ---------- ランキング（サーバーと連携） ----------
 async function loadRanking() {
-  const res = await fetch("/api/ranking");
-  const data = await res.json();
+  try {
+    const res = await fetch("/api/ranking");
+    if (!res.ok) throw new Error("failed to fetch ranking");
+    const data = await res.json(); // { ranking: [{username, time}, ...] }
 
-  rankingBody.innerHTML = "";
+    rankingBody.innerHTML = "";
+    const list = data.ranking || [];
 
-  data.forEach((r, i) => {
+    if (list.length === 0) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 3;
+      td.textContent = "まだ記録がありません";
+      tr.appendChild(td);
+      rankingBody.appendChild(tr);
+      return;
+    }
+
+    list.slice(0, 3).forEach((item, index) => {
+      const tr = document.createElement("tr");
+
+      const rankTd = document.createElement("td");
+      rankTd.textContent = index + 1;
+
+      const nameTd = document.createElement("td");
+      nameTd.textContent = item.username;
+
+      const timeTd = document.createElement("td");
+      timeTd.textContent = item.time.toFixed(2);
+
+      tr.appendChild(rankTd);
+      tr.appendChild(nameTd);
+      tr.appendChild(timeTd);
+      rankingBody.appendChild(tr);
+    });
+  } catch (e) {
+    console.error(e);
+    rankingBody.innerHTML = "";
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${i + 1}</td>
-      <td>${r.username}</td>
-      <td>${r.score.toFixed(2)}s</td>
-    `;
+    const td = document.createElement("td");
+    td.colSpan = 3;
+    td.textContent = "ランキング読み込みに失敗しました";
+    tr.appendChild(td);
     rankingBody.appendChild(tr);
-  });
-}
-
-async function submitScore() {
-  const username = usernameInput.value || "名無し";
-
-  await fetch("/api/submitScore", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      username,
-      score: currentTime
-    })
-  });
-
-  loadRanking();
-  restartBtn.style.display = "block";
-}
-
-// ====== BGM トグル ======
-bgmToggleBtn.addEventListener("click", () => {
-  bgmEnabled = !bgmEnabled;
-  if (!bgmEnabled) {
-    stopAllBgm();
-    bgmToggleBtn.textContent = "♪ BGM OFF";
-  } else {
-    bgmToggleBtn.textContent = "♪ BGM ON";
-    if (!gameStarted || gameOver) playHomeBgm();
-    else playGameBgm();
   }
-});
+}
 
-// ====== ゲーム開始 ======
+async function submitScore(timeSec) {
+  if (!currentUsername) return;
+  try {
+    await fetch("/api/ranking", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: currentUsername, time: timeSec })
+    });
+    await loadRanking();
+  } catch (e) {
+    console.error("submitScore error", e);
+  }
+}
+
+// ---------- 画面切り替え ----------
+function showRankingView() {
+  viewRanking.style.display = "block";
+  viewGame.style.display = "none";
+  stopAllBgm();
+  if (audioUnlocked) playHomeBgm();
+}
+
+function showGameView() {
+  viewRanking.style.display = "none";
+  viewGame.style.display = "block";
+}
+
+// スタートボタン
 startBtn.addEventListener("click", () => {
-  if (!usernameInput.value.trim()) {
-    alert("ユーザー名を入力してください！");
+  const name = usernameInput.value.trim();
+  if (!name) {
+    alert("ユーザー名を入力してください");
     return;
   }
-
-  playGameBgm();
-  document.getElementById("ranking-table").style.display = "none";
-  startBtn.style.display = "none";
-  usernameInput.style.display = "none";
-
+  currentUsername = name;
+  showGameView();
   resetGame();
+  // ゲーム画面に切り替わったタイミングで BGM をゲーム用に
+  if (audioUnlocked) playGameBgm();
 });
 
-// 再スタート
+// リスタートボタン
 restartBtn.addEventListener("click", () => {
-  restartBtn.style.display = "none";
-  playGameBgm();
+  // リスタート時はゲーム画面のまま
   resetGame();
 });
 
-// 初期ロード
+// ---------- ゲームオーバー ----------
+function endGame() {
+  if (gameOver) return;
+
+  gameOver = true;
+
+  playGameoverSe();
+  stopAllBgm(); // 効果音だけにするなら止める
+
+  if (currentTime > bestTime) {
+    bestTime = currentTime;
+    localStorage.setItem("bestTime_runGame", String(bestTime));
+  }
+  bestTimeEl.textContent = bestTime.toFixed(2);
+
+  messageEl.textContent = `ゲームオーバー！ 走行タイム：${currentTime.toFixed(2)} 秒`;
+
+  // スコア送信
+  submitScore(currentTime);
+}
+
+// ---------- 初期化 ----------
 loadRanking();
-playHomeBgm();
+showRankingView();
+resetGame();

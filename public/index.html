@@ -1,130 +1,83 @@
 <!DOCTYPE html>
 <html lang="ja">
-<head>
-  <meta charset="UTF-8" />
-  <title>暇つぶしランゲーム</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <head>
+    <meta charset="UTF-8" />
+    <title>暇つぶしランゲーム</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="wrapper">
+      <h1>暇つぶしランゲーム</h1>
+      <p class="desc">
+        画面タップ or スペースキーでジャンプ！<br />
+        段差につまずかずに、できるだけ長く走り続けよう🏃‍♀️✨
+      </p>
 
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: "Helvetica", "Arial", sans-serif;
-      background: #e6f4ff;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-    }
+      <!-- ===== ランキング画面 ===== -->
+      <div id="view-ranking">
+        <h2 class="sub-title">世界ランキング TOP3</h2>
 
-    #wrapper {
-      width: 100%;
-      max-width: 640px;
-      text-align: center;
-      padding: 10px;
-    }
+        <table class="ranking-table">
+          <thead>
+            <tr>
+              <th>順位</th>
+              <th>ユーザー名</th>
+              <th>タイム（秒）</th>
+            </tr>
+          </thead>
+          <tbody id="ranking-body">
+            <!-- JS で埋める -->
+          </tbody>
+        </table>
 
-    h1 {
-      font-size: 22px;
-      margin-bottom: 8px;
-    }
+        <div class="start-panel">
+          <input
+            id="username-input"
+            type="text"
+            maxlength="12"
+            placeholder="ユーザー名を入力（必須）"
+          />
+          <button id="start-btn" class="restart-btn">ゲームスタート</button>
+        </div>
+      </div>
 
-    #ranking-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 14px;
-      background: #fff;
-    }
+      <!-- ===== ゲーム画面 ===== -->
+      <div id="view-game" style="display: none;">
+        <canvas id="gameCanvas"></canvas>
 
-    #ranking-table th, #ranking-table td {
-      border: 1px solid #ccc;
-      padding: 6px;
-    }
+        <div class="hud">
+          <div>今回のタイム：<span id="current-time">0.00</span> 秒</div>
+          <div>ベストタイム：<span id="best-time">0.00</span> 秒</div>
+        </div>
 
-    #gameCanvas {
-      width: 100%;
-      background: #6ec9ff;
-      border-radius: 12px;
-      display: none;
-      margin-top: 10px;
-    }
+        <div id="message" class="status">
+          画面タップ or スペースキーでスタート＆ジャンプ！
+        </div>
+        <button id="restart-btn" class="restart-btn">もう一度</button>
+      </div>
 
-    #start-btn {
-      font-size: 18px;
-      padding: 10px 22px;
-      margin-top: 14px;
-      background: #4ea5ff;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-    }
-
-    #restart-btn {
-      font-size: 16px;
-      padding: 8px 20px;
-      margin-top: 10px;
-      background: #555;
-      color: #fff;
-      border-radius: 8px;
-      border: none;
-      display: none;
-    }
-
-    .hud {
-      display: none;
-      justify-content: space-between;
-      margin-top: 10px;
-      font-size: 15px;
-    }
-
-    #bgm-toggle {
-      margin-top: 10px;
-      padding: 8px 16px;
-      background: #ffcc33;
-      border-radius: 8px;
-      border: none;
-      cursor: pointer;
-      font-size: 15px;
-    }
-  </style>
-</head>
-
-<body>
-  <div id="wrapper">
-    <h1>暇つぶしランゲーム 🏃‍♂️🔥</h1>
-
-    <!-- ランキング画面 -->
-    <table id="ranking-table">
-      <thead>
-        <tr><th>順位</th><th>ユーザー名</th><th>タイム</th></tr>
-      </thead>
-      <tbody id="ranking-body">
-        <tr><td colspan="3">読み込み中...</td></tr>
-      </tbody>
-    </table>
-
-    <input id="username-input" type="text" placeholder="ユーザー名を入力" style="padding:6px;width:90%;">
-
-    <button id="start-btn">ゲームスタート</button>
-    <button id="bgm-toggle">♪ BGM ON</button>
-
-    <div class="hud" id="hud">
-      <div>今回：<span id="current-time">0.00</span>s</div>
-      <div>ベスト：<span id="best-time">0.00</span>s</div>
+      <!-- ===== BGM / SE ===== -->
+      <audio
+        id="bgm-home"
+        src="bgm_home.mp3"
+        preload="auto"
+        loop
+      ></audio>
+      <audio
+        id="bgm-game"
+        src="bgm_game.mp3"
+        preload="auto"
+        loop
+      ></audio>
+      <audio id="se-jump" src="se_jump.mp3" preload="auto"></audio>
+      <audio
+        id="se-gameover"
+        src="se_gameover.mp3"
+        preload="auto"
+      ></audio>
     </div>
 
-    <div id="message"></div>
-
-    <canvas id="gameCanvas"></canvas>
-
-    <button id="restart-btn">もう一度</button>
-  </div>
-
-  <!-- ★ 音源 -->
-  <audio id="bgm-home" src="bgm_home.mp3" loop></audio>
-  <audio id="bgm-game" src="bgm_game.mp3" loop></audio>
-  <audio id="se-jump" src="se_jump.mp3"></audio>
-  <audio id="se-gameover" src="se_gameover.mp3"></audio>
-
-  <script src="./game.js"></script>
-</body>
+    <script src="./game.js"></script>
+  </body>
 </html>
