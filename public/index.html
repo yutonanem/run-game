@@ -1,101 +1,130 @@
 <!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <title>暇つぶしランゲーム</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="./style.css" />
-    <link rel="manifest" href="./manifest.webmanifest" />
-    <meta name="theme-color" content="#6ec9ff" />
-  </head>
-  <body>
-    <div class="wrapper">
-      <!-- ▼ ランキング画面 ▼ -->
-      <div id="screen-ranking" class="screen">
-        <h1>暇つぶしランゲーム</h1>
-        <p class="desc">
-          画面タップ or スペースキーでジャンプ！<br />
-          段差につまずかずに、できるだけ長く走り続けよう🏃‍♀️✨
-        </p>
+<head>
+  <meta charset="UTF-8" />
+  <title>暇つぶしランゲーム</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-        <section class="ranking-section">
-          <h2 class="ranking-title">ランキング TOP3</h2>
-          <table class="ranking-table">
-            <thead>
-              <tr>
-                <th>順位</th>
-                <th>名前</th>
-                <th>タイム（秒）</th>
-              </tr>
-            </thead>
-            <tbody id="ranking-body"></tbody>
-          </table>
-          <p id="ranking-empty" class="ranking-empty">
-            まだ記録がありません。まずはゲームをプレイしてみよう！
-          </p>
-        </section>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: "Helvetica", "Arial", sans-serif;
+      background: #e6f4ff;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
 
-        <button id="go-game-btn" class="primary-btn">
-          ゲームスタート
-        </button>
-      </div>
+    #wrapper {
+      width: 100%;
+      max-width: 640px;
+      text-align: center;
+      padding: 10px;
+    }
 
-      <!-- ▼ ゲーム画面 ▼ -->
-      <div id="screen-game" class="screen" hidden>
-        <button id="back-ranking-btn" class="back-btn">
-          ← ランキングにもどる
-        </button>
+    h1 {
+      font-size: 22px;
+      margin-bottom: 8px;
+    }
 
-        <!-- ログインエリア -->
-        <div id="login-area" class="login-area">
-          <p class="login-title">ログイン</p>
-          <input
-            id="player-name-input"
-            class="login-input"
-            type="text"
-            maxlength="16"
-            placeholder="なまえを入力"
-          />
-          <button id="login-btn" class="login-btn">ゲームスタート</button>
-        </div>
+    #ranking-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 14px;
+      background: #fff;
+    }
 
-        <!-- ログイン済み情報 -->
-        <div id="user-info" class="user-info" hidden>
-          <span id="user-name-label"></span> さんでプレイ中
-          <button id="logout-btn" class="logout-btn">ログアウト</button>
-        </div>
+    #ranking-table th, #ranking-table td {
+      border: 1px solid #ccc;
+      padding: 6px;
+    }
 
-        <h1>暇つぶしランゲーム</h1>
-        <p class="desc">
-          画面タップ or スペースキーでジャンプ！<br />
-          段差につまずかずに、できるだけ長く走り続けよう🏃‍♀️✨
-        </p>
+    #gameCanvas {
+      width: 100%;
+      background: #6ec9ff;
+      border-radius: 12px;
+      display: none;
+      margin-top: 10px;
+    }
 
-        <canvas id="gameCanvas"></canvas>
+    #start-btn {
+      font-size: 18px;
+      padding: 10px 22px;
+      margin-top: 14px;
+      background: #4ea5ff;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+    }
 
-        <div class="hud">
-          <div>今回のタイム：<span id="current-time">0.00</span> 秒</div>
-          <div>ベストタイム：<span id="best-time">0.00</span> 秒</div>
-        </div>
+    #restart-btn {
+      font-size: 16px;
+      padding: 8px 20px;
+      margin-top: 10px;
+      background: #555;
+      color: #fff;
+      border-radius: 8px;
+      border: none;
+      display: none;
+    }
 
-        <div id="message" class="status"></div>
-        <button id="restart-btn" class="restart-btn">もう一度</button>
-      </div>
+    .hud {
+      display: none;
+      justify-content: space-between;
+      margin-top: 10px;
+      font-size: 15px;
+    }
+
+    #bgm-toggle {
+      margin-top: 10px;
+      padding: 8px 16px;
+      background: #ffcc33;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 15px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="wrapper">
+    <h1>暇つぶしランゲーム 🏃‍♂️🔥</h1>
+
+    <!-- ランキング画面 -->
+    <table id="ranking-table">
+      <thead>
+        <tr><th>順位</th><th>ユーザー名</th><th>タイム</th></tr>
+      </thead>
+      <tbody id="ranking-body">
+        <tr><td colspan="3">読み込み中...</td></tr>
+      </tbody>
+    </table>
+
+    <input id="username-input" type="text" placeholder="ユーザー名を入力" style="padding:6px;width:90%;">
+
+    <button id="start-btn">ゲームスタート</button>
+    <button id="bgm-toggle">♪ BGM ON</button>
+
+    <div class="hud" id="hud">
+      <div>今回：<span id="current-time">0.00</span>s</div>
+      <div>ベスト：<span id="best-time">0.00</span>s</div>
     </div>
 
-    <script src="./game.js"></script>
+    <div id="message"></div>
 
-    <!-- PWA用 Service Worker 登録 -->
-    <script>
-      if ("serviceWorker" in navigator) {
-        window.addEventListener("load", () => {
-          navigator.serviceWorker
-            .register("/service-worker.js")
-            .catch((err) => {
-              console.log("Service Worker registration failed:", err);
-            });
-        });
-      }
-    </script>
-  </body>
+    <canvas id="gameCanvas"></canvas>
+
+    <button id="restart-btn">もう一度</button>
+  </div>
+
+  <!-- ★ 音源 -->
+  <audio id="bgm-home" src="bgm_home.mp3" loop></audio>
+  <audio id="bgm-game" src="bgm_game.mp3" loop></audio>
+  <audio id="se-jump" src="se_jump.mp3"></audio>
+  <audio id="se-gameover" src="se_gameover.mp3"></audio>
+
+  <script src="./game.js"></script>
+</body>
 </html>
