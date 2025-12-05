@@ -40,13 +40,10 @@ const seJump = document.getElementById("se-jump");
 const seGameover = document.getElementById("se-gameover");
 
 // ---------- 共通ヘルパー ----------
-
-// 画像が使える状態かチェック（broken 対策）
 function isImageUsable(img) {
   return !!(img && img.complete && img.naturalWidth > 0);
 }
 
-// 音声
 function playAudio(a) {
   if (!a) return;
   try {
@@ -95,6 +92,8 @@ function rectsOverlap(a, b) {
 }
 
 // ---------- キャンバスサイズ ----------
+// CSS 側でキャンバスの見た目サイズを決めているので、ここでは
+// その見た目サイズに内部解像度を合わせる
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width;
@@ -132,15 +131,15 @@ let nextSpawnInterval = 0;
 let difficulty = 1;
 let currentUsername = "";
 
-// 押されている障害物
-let collidedObstacle = null;
+let collidedObstacle = null; // 押されている障害物
 
 // ---------- プレイヤー ----------
 function initPlayer() {
-  const size = Math.min(canvas.width, canvas.height) * 0.4;
+  // ★ズームアウト：キャラをかなり小さめに
+  const size = Math.min(canvas.width, canvas.height) * 0.18;
 
   player = {
-    x: canvas.width * 0.2,
+    x: canvas.width * 0.18,
     y: getGroundY() - size,
     width: size,
     height: size,
@@ -174,18 +173,18 @@ function initBackground() {
 
   const groundY = getGroundY();
 
-  for (let i = 0; i < 10; i++) {
-    const w = 180;
-    const h = canvas.height * randRange(0.15, 0.28);
-    const x = i * 180;
+  for (let i = 0; i < 12; i++) {
+    const w = 200;
+    const h = canvas.height * randRange(0.12, 0.22);
+    const x = i * 200;
     const y = groundY - canvas.height * 0.55 - h;
     bgFarBlocks.push({ x, y, width: w, height: h, speed: 40 });
   }
 
-  for (let i = 0; i < 10; i++) {
-    const w = 120;
-    const h = canvas.height * randRange(0.18, 0.25);
-    const x = i * 160 + 40;
+  for (let i = 0; i < 12; i++) {
+    const w = 140;
+    const h = canvas.height * randRange(0.16, 0.24);
+    const x = i * 180 + 40;
     const y = groundY - canvas.height * 0.35 - h;
     bgNearBlocks.push({ x, y, width: w, height: h, speed: 100 });
   }
@@ -222,7 +221,7 @@ function spawnObstacle() {
   const baseSpeed = randRange(260, 360);
   let obsSpeed = baseSpeed * difficulty;
 
-  // 炎の頻度アップ（fireball を2回入れる）
+  // 炎多め（fireball を2回入れる）
   const shapeTypes = [
     "rect",
     "stair",
@@ -240,14 +239,12 @@ function spawnObstacle() {
     obsWidth = fireBase * 1.3;
     obsHeight = fireBase * 0.9;
 
-    // ★ 中段は廃止して「下 or 上」だけ
-    const mode = Math.random() < 0.5 ? 0 : 2; // 0:下, 2:上
+    // ★中段はナシ。下 or 上だけ
+    const mode = Math.random() < 0.5 ? 0 : 2; // 0:下 2:上
     if (mode === 0) {
-      // 下段（地面近く）
-      obsY = getGroundY() - obsHeight - 4;
+      obsY = getGroundY() - obsHeight - 4; // 下段
     } else {
-      // 上段（頭の上を飛ぶ）
-      obsY = getGroundY() - obsHeight - player.height * 1.2;
+      obsY = getGroundY() - obsHeight - player.height * 1.2; // 上段
     }
 
     obsSpeed = obsSpeed * 1.3;
@@ -267,7 +264,7 @@ function spawnObstacle() {
 
 // ---------- 救助 ----------
 function resetRescueTimer() {
-  nextRescueInterval = randRange(6000, 12000); // 6〜12秒
+  nextRescueInterval = randRange(6000, 12000);
   rescueSpawnTimer = 0;
 }
 
@@ -543,9 +540,7 @@ function draw() {
         ctx.fillStyle = "#ffccff";
         ctx.fillRect(r.x, r.y, r.width, r.height);
       }
-    } catch (e) {
-      console.log("draw rescue error:", e);
-    }
+    } catch (_) {}
   });
 
   // プレイヤー
@@ -556,9 +551,7 @@ function draw() {
       ctx.fillStyle = "#ffd400";
       ctx.fillRect(player.x, player.y, player.width, player.height);
     }
-  } catch (e) {
-    console.log("draw player error:", e);
-  }
+  } catch (_) {}
 
   // 障害物
   obstacles.forEach(drawObstacle);

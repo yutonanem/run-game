@@ -1,3 +1,4 @@
+/* ===== ベース ===== */
 * {
   box-sizing: border-box;
 }
@@ -10,206 +11,232 @@ body {
 }
 
 body {
-  font-family: "Helvetica", "Arial", sans-serif;
-  background: #f0f2f5;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Helvetica Neue", Arial, sans-serif;
+  background: radial-gradient(circle at top, #8fd5ff 0, #5e8cff 35%, #1b1f3b 100%);
+  color: #111827;
+}
+
+/* アプリ全体を画面いっぱいに */
+.app-root {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== ヘッダー ===== */
+.app-header {
+  padding: 8px 16px 4px;
+  color: #f9fafb;
+}
+
+.title-block {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: clamp(20px, 2.4vw, 26px);
+  letter-spacing: 0.06em;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: clamp(12px, 1.5vw, 14px);
+  line-height: 1.5;
+  opacity: 0.9;
+}
+
+/* ===== メインレイアウト ===== */
+.app-main {
+  flex: 1;
+  padding: 0 16px 16px;
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: stretch;
 }
 
-.wrapper {
-  width: 100%;
-  max-width: 640px;
-  background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
-  padding: 16px 16px 20px;
-}
-
-/* 2画面共通 */
 .screen {
   width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
-/* タイトル & 説明 */
-h1 {
-  text-align: center;
-  font-size: 22px;
-  margin: 0 0 8px;
-}
-
-.desc {
-  text-align: center;
-  font-size: 13px;
-  color: #555;
-  margin: 0 0 14px;
-  line-height: 1.5;
-}
-
-/* ゲームキャンバス */
-#gameCanvas {
-  width: 100%;
-  height: 260px;
-  border-radius: 12px;
-  background: linear-gradient(#87ceeb, #e0f7ff);
-  display: block;
-}
-
-/* スコア表示 */
-.hud {
+/* ===== パネル共通 ===== */
+.panel {
+  background: rgba(249, 250, 251, 0.96);
+  border-radius: 18px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.25);
+  padding: 16px 18px 18px;
+  height: 100%;
   display: flex;
-  justify-content: space-between;
-  margin-top: 8px;
-  font-size: 14px;
+  flex-direction: column;
 }
 
-/* メッセージ */
-.status {
-  text-align: center;
-  font-size: 14px;
-  margin-top: 8px;
-  min-height: 22px;
-}
-
-/* メインボタン */
-.primary-btn,
-.restart-btn {
-  display: block;
-  margin: 14px auto 0;
-  padding: 8px 24px;
-  font-size: 15px;
-  border: none;
-  border-radius: 8px;
-  background: #4e9af1;
-  color: #fff;
-  cursor: pointer;
-}
-
-.primary-btn:active,
-.restart-btn:active {
-  transform: translateY(1px);
-}
-
-/* ランキング用 */
-.ranking-section {
-  margin: 12px 0;
-}
-
-.ranking-title {
+.panel-title {
+  margin: 0 0 10px;
   font-size: 16px;
+  letter-spacing: 0.08em;
   text-align: center;
-  margin: 0 0 8px;
 }
 
+/* ===== ランキング ===== */
 .ranking-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  margin-bottom: 10px;
 }
 
 .ranking-table th,
 .ranking-table td {
-  border: 1px solid #ddd;
+  border: 1px solid #e5e7eb;
   padding: 6px 8px;
   text-align: center;
 }
 
 .ranking-table th {
-  background: #f3f7ff;
+  background: #eff6ff;
   font-weight: 600;
 }
 
-.ranking-empty {
-  text-align: center;
-  font-size: 12px;
-  color: #777;
-  margin: 8px 0 0;
-}
-
-/* 戻るボタン（ゲーム画面） */
-.back-btn {
-  border: none;
-  background: transparent;
-  color: #4e9af1;
-  font-size: 12px;
-  cursor: pointer;
-  padding: 0;
-  margin-bottom: 6px;
-}
-
-/* ===== ログインUI ===== */
-.login-area {
+.start-panel {
+  margin-top: auto;
+  padding-top: 8px;
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  justify-content: center;
 }
 
-.login-title {
-  font-size: 13px;
-  margin: 0 6px 0 0;
-}
-
-.login-input {
-  padding: 6px 8px;
+#username-input {
+  padding: 8px 10px;
+  min-width: 180px;
   font-size: 14px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  min-width: 140px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  outline: none;
 }
 
-.login-btn {
-  padding: 6px 14px;
-  font-size: 14px;
+#username-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* ===== ボタン ===== */
+.btn {
   border: none;
-  border-radius: 6px;
-  background: #4e9af1;
+  border-radius: 999px;
+  padding: 8px 20px;
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform 0.05s ease, box-shadow 0.1s ease, background 0.1s ease;
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
   color: #fff;
-  cursor: pointer;
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.4);
 }
 
-.login-btn:active {
-  transform: translateY(1px);
+.primary-btn:hover {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
 }
 
-.user-info {
-  font-size: 12px;
-  color: #555;
+.secondary-btn {
+  background: #111827;
+  color: #f9fafb;
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.35);
+}
+
+.btn:active {
+  transform: translateY(1px) scale(0.99);
+  box-shadow: none;
+}
+
+/* ===== ゲーム画面レイアウト ===== */
+.screen-game .game-layout {
+  background: rgba(249, 250, 251, 0.96);
+  border-radius: 18px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.25);
+  padding: 12px 14px 14px;
+  height: 100%;
   display: flex;
+  flex-direction: column;
+}
+
+/* キャンバスはできるだけ大きく（上下のHUDを除いた残り全部） */
+.game-canvas-wrapper {
+  flex: 1;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(#87ceeb, #e0f7ff);
+}
+
+/* 中身の描画サイズは JS で調整 */
+#gameCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* HUD */
+.hud-row {
+  display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
+  gap: 6px 10px;
+  margin-top: 8px;
+  font-size: 13px;
 }
 
-.logout-btn {
-  border: none;
-  background: transparent;
-  color: #888;
-  font-size: 12px;
-  cursor: pointer;
-  text-decoration: underline;
-  padding: 2px 4px;
+.hud-item {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
 }
 
-.logout-btn:active {
-  opacity: 0.7;
+.hud-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
-/* スマホ対応 */
-@media (max-width: 600px) {
-  body {
-    background: #ffffff;
+/* メッセージ＆ボタン */
+.status-text {
+  margin-top: 6px;
+  min-height: 20px;
+  font-size: 13px;
+  text-align: center;
+  color: #374151;
+}
+
+.game-controls {
+  margin-top: 8px;
+  display: flex;
+  justify-content: center;
+}
+
+/* ===== スマホ向け調整 ===== */
+@media (max-width: 768px) {
+  .app-header {
+    padding: 6px 10px 0;
   }
 
-  .wrapper {
+  .app-main {
+    padding: 0 8px 8px;
+  }
+
+  .screen-game .game-layout,
+  .panel {
     border-radius: 0;
     box-shadow: none;
-    height: 100vh;
+    padding: 8px 8px 10px;
   }
 
-  #gameCanvas {
-    height: 230px;
+  .game-canvas-wrapper {
+    border-radius: 10px;
   }
 }

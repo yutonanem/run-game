@@ -7,58 +7,84 @@
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <div class="wrapper">
-      <h1>暇つぶしランゲーム</h1>
-      <p class="desc">
-        画面タップ or スペースキーでジャンプ！<br />
-        段差につまずかずに、できるだけ長く走り続けよう🏃‍♀️✨
-      </p>
-
-      <!-- ===== ランキング画面 ===== -->
-      <div id="view-ranking">
-        <h2 class="sub-title">世界ランキング TOP3</h2>
-
-        <table class="ranking-table">
-          <thead>
-            <tr>
-              <th>順位</th>
-              <th>ユーザー名</th>
-              <th>タイム（秒）</th>
-            </tr>
-          </thead>
-          <tbody id="ranking-body">
-            <!-- JS で埋める -->
-          </tbody>
-        </table>
-
-        <div class="start-panel">
-          <input
-            id="username-input"
-            type="text"
-            maxlength="12"
-            placeholder="ユーザー名を入力（必須）"
-          />
-          <button id="start-btn" class="restart-btn">ゲームスタート</button>
+    <div class="app-root">
+      <header class="app-header">
+        <div class="title-block">
+          <h1>暇つぶしランゲーム</h1>
+          <p class="subtitle">
+            画面タップ or スペースキーでジャンプ！<br />
+            段差につまずかず、できるだけ長く走り続けよう🏃‍♀️✨
+          </p>
         </div>
-      </div>
+      </header>
 
-      <!-- ===== ゲーム画面 ===== -->
-      <div id="view-game" style="display: none;">
-        <canvas id="gameCanvas"></canvas>
+      <main class="app-main">
+        <!-- ===== ランキング画面 ===== -->
+        <section id="view-ranking" class="screen screen-ranking">
+          <div class="panel">
+            <h2 class="panel-title">世界ランキング TOP3</h2>
 
-        <div class="hud">
-          <div>今回のタイム：<span id="current-time">0.00</span> 秒</div>
-          <div>ベストタイム：<span id="best-time">0.00</span> 秒</div>
-        </div>
-        <div class="hud">
-          <div>救助人数：<span id="rescue-count">0</span> 人</div>
-        </div>
+            <table class="ranking-table">
+              <thead>
+                <tr>
+                  <th>順位</th>
+                  <th>ユーザー名</th>
+                  <th>タイム（秒）</th>
+                </tr>
+              </thead>
+              <tbody id="ranking-body">
+                <!-- JS で埋める -->
+              </tbody>
+            </table>
 
-        <div id="message" class="status">
-          画面タップ or スペースキーでスタート＆ジャンプ！
-        </div>
-        <button id="restart-btn" class="restart-btn">もう一度</button>
-      </div>
+            <div class="start-panel">
+              <input
+                id="username-input"
+                type="text"
+                maxlength="12"
+                placeholder="ユーザー名を入力（必須）"
+              />
+              <button id="start-btn" class="btn primary-btn">
+                ゲームスタート
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== ゲーム画面 ===== -->
+        <section id="view-game" class="screen screen-game" style="display: none;">
+          <div class="game-layout">
+            <div class="game-canvas-wrapper">
+              <canvas id="gameCanvas"></canvas>
+            </div>
+
+            <div class="hud-row">
+              <div class="hud-item">
+                今回のタイム：
+                <span id="current-time" class="hud-value">0.00</span> 秒
+              </div>
+              <div class="hud-item">
+                ベストタイム：
+                <span id="best-time" class="hud-value">0.00</span> 秒
+              </div>
+              <div class="hud-item">
+                救助人数：
+                <span id="rescue-count" class="hud-value">0</span> 人
+              </div>
+            </div>
+
+            <div id="message" class="status-text">
+              画面タップ or スペースキーでスタート＆ジャンプ！
+            </div>
+
+            <div class="game-controls">
+              <button id="restart-btn" class="btn secondary-btn">
+                もう一度プレイ
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
 
       <!-- ===== BGM / SE ===== -->
       <audio id="bgm-home" src="bgm_home.mp3" preload="auto" loop></audio>
