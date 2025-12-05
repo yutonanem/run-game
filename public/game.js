@@ -240,14 +240,14 @@ function spawnObstacle() {
     obsWidth = fireBase * 1.3;
     obsHeight = fireBase * 0.9;
 
-    // 下・中・上 段
-    const mode = Math.floor(Math.random() * 3);
+    // ★ 中段は廃止して「下 or 上」だけ
+    const mode = Math.random() < 0.5 ? 0 : 2; // 0:下, 2:上
     if (mode === 0) {
-      obsY = getGroundY() - obsHeight - 4; // 下
-    } else if (mode === 1) {
-      obsY = getGroundY() - obsHeight - player.height * 0.6; // 中
+      // 下段（地面近く）
+      obsY = getGroundY() - obsHeight - 4;
     } else {
-      obsY = getGroundY() - obsHeight - player.height * 1.2; // 上
+      // 上段（頭の上を飛ぶ）
+      obsY = getGroundY() - obsHeight - player.height * 1.2;
     }
 
     obsSpeed = obsSpeed * 1.3;
