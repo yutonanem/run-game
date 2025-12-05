@@ -3,16 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <title>暇つぶしランゲーム</title>
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- PWA 関連 -->
-    <link rel="manifest" href="./manifest.webmanifest" />
-    <meta name="theme-color" content="#6ec9ff" />
-
-    <!-- アイコン（ブラウザ用 & iOS用） -->
-    <link rel="icon" type="image/png" href="./icon-192.png" />
-    <link rel="apple-touch-icon" href="./icon-192.png" />
-
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
@@ -59,6 +50,9 @@
           <div>今回のタイム：<span id="current-time">0.00</span> 秒</div>
           <div>ベストタイム：<span id="best-time">0.00</span> 秒</div>
         </div>
+        <div class="hud">
+          <div>救助人数：<span id="rescue-count">0</span> 人</div>
+        </div>
 
         <div id="message" class="status">
           画面タップ or スペースキーでスタート＆ジャンプ！
@@ -67,24 +61,10 @@
       </div>
 
       <!-- ===== BGM / SE ===== -->
-      <audio
-        id="bgm-home"
-        src="bgm_home.mp3"
-        preload="auto"
-        loop
-      ></audio>
-      <audio
-        id="bgm-game"
-        src="bgm_game.mp3"
-        preload="auto"
-        loop
-      ></audio>
+      <audio id="bgm-home" src="bgm_home.mp3" preload="auto" loop></audio>
+      <audio id="bgm-game" src="bgm_game.mp3" preload="auto" loop></audio>
       <audio id="se-jump" src="se_jump.mp3" preload="auto"></audio>
-      <audio
-        id="se-gameover"
-        src="se_gameover.mp3"
-        preload="auto"
-      ></audio>
+      <audio id="se-gameover" src="se_gameover.mp3" preload="auto"></audio>
     </div>
 
     <script src="./game.js"></script>
