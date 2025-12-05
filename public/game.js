@@ -36,10 +36,15 @@ const seGameover = document.getElementById("se-gameover");
 // シンプルな再生ヘルパー
 function playAudio(a) {
   if (!a) return;
-  a.currentTime = 0;
-  a.play().catch((err) => {
-    console.log("audio play error:", err);
-  });
+  try {
+    a.currentTime = 0;
+    const p = a.play();
+    if (p && p.catch) {
+      p.catch((err) => console.log("audio play error:", err));
+    }
+  } catch (e) {
+    console.log("audio play error:", e);
+  }
 }
 function stopAudio(a) {
   if (!a) return;
@@ -128,7 +133,10 @@ function initPlayer() {
     jumpPower: -600,
     onGround: true,
     maxJumps: 3,
-    jumpCount: 0
+    jumpCount: 0,
+    // ★ 押し出し関連
+    isPushed: false,
+    pushSpeed: 0
   };
 }
 
@@ -197,16 +205,29 @@ function spawnObstacle() {
   const rawWidth = randRange(baseSize * 0.7, baseSize * 1.4);
   const rawHeight = randRange(baseSize * 0.9, baseSize * 1.8);
 
+  // 通常障害物（半分サイズ）
   let obsWidth = rawWidth * 0.4;
   let obsHeight = rawHeight * 0.4;
 
-  let obsY = getGroundY() - obsHeight; // 地面に接する
+  // 地面に接する
+  let obsY = getGroundY() - obsHeight;
+
   const baseSpeed = randRange(260, 360);
   let obsSpeed = baseSpeed * difficulty;
 
-  const shapeTypes = ["rect", "stair", "triangle", "dome", "pole", "image", "fireball"];
-  const shape = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
+  // ★ 炎の出現確率を 1.5 倍にする
+  const normalShapes = ["rect", "stair", "triangle", "dome", "pole", "image"]; // 6種
+  const baseFireProb = 1 / 7; // 基準
+  const fireProb = baseFireProb * 1.5;
 
+  let shape;
+  if (Math.random() < fireProb) {
+    shape = "fireball";
+  } else {
+    shape = normalShapes[Math.floor(Math.random() * normalShapes.length)];
+  }
+
+  // 火の玉だけ特別扱い（サイズ2倍）
   if (shape === "fireball") {
     const fireBase = baseSize * 1.8;
     obsWidth = fireBase * 1.3;
@@ -249,11 +270,14 @@ function resetGame() {
 
 // ---------- 入力 ----------
 function handleJump() {
+  // 押し出されている最中はジャンプ不可
+  if (player && player.isPushed) return;
+
   if (!gameStarted) {
     gameStarted = true;
     startTime = performance.now();
     messageEl.textContent = "";
-    // ※ジャンプの最初の1回目で BGM が鳴る
+    // ジャンプ1回目の瞬間にゲームBGM開始
     playGameBgm();
   }
 
@@ -291,7 +315,7 @@ function update(delta) {
 
   difficulty = 1 + currentTime * 0.03;
 
-  // プレイヤー
+  // プレイヤーの縦方向
   player.vy += player.gravity * delta;
   player.y += player.vy * delta;
 
@@ -325,18 +349,35 @@ function update(delta) {
   });
   obstacles = obstacles.filter((obs) => obs.x + obs.width > 0);
 
-  // 当たり判定
-  const p = getPlayerHitbox();
-  for (const obs of obstacles) {
-    const o = getObstacleHitbox(obs);
-    if (
-      p.x < o.x + o.width &&
-      p.x + p.width > o.x &&
-      p.y < o.y + o.height &&
-      p.y + p.height > o.y
-    ) {
+  // ★ 押し出し中なら、障害物とは別にプレイヤーを左へ流す
+  if (player.isPushed) {
+    player.x -= player.pushSpeed * delta;
+    if (player.x <= 0) {
       endGame();
-      break;
+      return;
+    }
+  } else {
+    // まだ押し出されていないときだけ「ぶつかったら押し出し開始」
+    const p = getPlayerHitbox();
+    for (const obs of obstacles) {
+      const o = getObstacleHitbox(obs);
+      if (
+        p.x < o.x + o.width &&
+        p.x + p.width > o.x &&
+        p.y < o.y + o.height &&
+        p.y + p.height > o.y
+      ) {
+        // ★ 衝突 → 押し出しモードへ
+        player.isPushed = true;
+        player.pushSpeed = obs.speed; // 障害物のスピードで左へ
+        // プレイヤーを障害物の左側にそろえる
+        player.x = o.x - player.width;
+        // 縦方向はその場でストップ
+        player.vy = 0;
+        player.onGround = true;
+        player.jumpCount = player.maxJumps; // これ以上ジャンプ不可
+        break;
+      }
     }
   }
 }
@@ -549,7 +590,7 @@ async function submitScore(timeSec) {
 function showRankingView() {
   viewRanking.style.display = "block";
   viewGame.style.display = "none";
-  // 将来的にホームBGM流したければここで playHomeBgm() を呼ぶ
+  // 必要ならここで playHomeBgm();
 }
 
 function showGameView() {
@@ -567,7 +608,6 @@ startBtn.addEventListener("click", () => {
   currentUsername = name;
   showGameView();
   resetGame();
-  // ここではまだBGM鳴らさず、最初のジャンプの瞬間に鳴らす
 });
 
 // リスタート
