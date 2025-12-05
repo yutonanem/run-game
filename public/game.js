@@ -1,6 +1,8 @@
 // ====== 暇つぶしランゲーム game.js ======
 "use strict";
 
+console.log("game.js v9 (5s buff & more zoom-out) loaded");
+
 // ---------- 画面要素 ----------
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -10,7 +12,7 @@ const bestTimeEl = document.getElementById("best-time");
 const messageEl = document.getElementById("message");
 const restartBtn = document.getElementById("restart-btn");
 
-// ランキング画面
+// ランキング画面まわり
 const viewRanking = document.getElementById("view-ranking");
 const viewGame = document.getElementById("view-game");
 const rankingBody = document.getElementById("ranking-body");
@@ -30,6 +32,7 @@ fireballImg.src = "fireball.png";
 const playerImg = new Image();
 playerImg.src = "firefighter.png";
 
+// 救助対象
 const rescueImg = new Image();
 rescueImg.src = "rescue.png";
 
@@ -40,17 +43,24 @@ const seJump = document.getElementById("se-jump");
 const seGameover = document.getElementById("se-gameover");
 
 // ---------- 共通ヘルパー ----------
+
+// 画像が使える状態かチェック（broken 対策）
 function isImageUsable(img) {
   return !!(img && img.complete && img.naturalWidth > 0);
 }
 
+// 音声再生
 function playAudio(a) {
   if (!a) return;
   try {
     a.currentTime = 0;
     const p = a.play();
-    if (p && p.catch) p.catch(() => {});
-  } catch (_) {}
+    if (p && p.catch) {
+      p.catch((err) => console.log("audio play error:", err));
+    }
+  } catch (e) {
+    console.log("audio error:", e);
+  }
 }
 function stopAudio(a) {
   if (!a) return;
@@ -92,8 +102,6 @@ function rectsOverlap(a, b) {
 }
 
 // ---------- キャンバスサイズ ----------
-// CSS 側でキャンバスの見た目サイズを決めているので、ここでは
-// その見た目サイズに内部解像度を合わせる
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width;
@@ -131,27 +139,38 @@ let nextSpawnInterval = 0;
 let difficulty = 1;
 let currentUsername = "";
 
-let collidedObstacle = null; // 押されている障害物
+// 押されている障害物
+let collidedObstacle = null;
+
+// ★ 救助による一時的なパワーアップ（ミリ秒の期限）
+let sizeBoostUntil = 0; // プレイヤーが大きくなる期間
+let jumpBoostUntil = 0; // ジャンプが高くなる期間
+const BUFF_DURATION_MS = 5000; // ★ 5秒に変更
 
 // ---------- プレイヤー ----------
 function initPlayer() {
-  // ★ズームアウト：キャラをかなり小さめに
-  const size = Math.min(canvas.width, canvas.height) * 0.18;
+  // ★ さらに引きの画角に：0.25 → 0.20 に縮小
+  const size = Math.min(canvas.width, canvas.height) * 0.20;
 
   player = {
     x: canvas.width * 0.18,
     y: getGroundY() - size,
     width: size,
     height: size,
+    // ベースサイズを保持（障害物サイズ計算用 & バフの基準）
+    baseWidth: size,
+    baseHeight: size,
+
     vy: 0,
     gravity: 1600,
-    jumpPower: -600,
-    onGround: true,
+    baseJumpPower: -600, // 基本ジャンプ力
     maxJumps: 3,
-    jumpCount: 0
+    jumpCount: 0,
+    onGround: true
   };
 }
 
+// プレイヤーのヒットボックス（胴体中心だけ）
 function getPlayerHitbox() {
   const hitWidth = player.width * 0.45;
   const hitHeight = player.height * 0.75;
@@ -173,18 +192,18 @@ function initBackground() {
 
   const groundY = getGroundY();
 
-  for (let i = 0; i < 12; i++) {
-    const w = 200;
+  for (let i = 0; i < 10; i++) {
+    const w = 180;
     const h = canvas.height * randRange(0.12, 0.22);
-    const x = i * 200;
+    const x = i * 180;
     const y = groundY - canvas.height * 0.55 - h;
     bgFarBlocks.push({ x, y, width: w, height: h, speed: 40 });
   }
 
-  for (let i = 0; i < 12; i++) {
-    const w = 140;
-    const h = canvas.height * randRange(0.16, 0.24);
-    const x = i * 180 + 40;
+  for (let i = 0; i < 10; i++) {
+    const w = 120;
+    const h = canvas.height * randRange(0.16, 0.23);
+    const x = i * 160 + 40;
     const y = groundY - canvas.height * 0.35 - h;
     bgNearBlocks.push({ x, y, width: w, height: h, speed: 100 });
   }
@@ -209,7 +228,8 @@ function resetSpawnTimer() {
 }
 
 function spawnObstacle() {
-  const baseSize = player.height;
+  // ★ 障害物サイズは「ベースのプレイヤーサイズ」を基準にする
+  const baseSize = player?.baseHeight || player?.height || 80;
 
   const rawWidth = randRange(baseSize * 0.7, baseSize * 1.4);
   const rawHeight = randRange(baseSize * 0.9, baseSize * 1.8);
@@ -221,7 +241,7 @@ function spawnObstacle() {
   const baseSpeed = randRange(260, 360);
   let obsSpeed = baseSpeed * difficulty;
 
-  // 炎多め（fireball を2回入れる）
+  // 炎の頻度アップ（2つ入れて重みづけ）、中段は無し
   const shapeTypes = [
     "rect",
     "stair",
@@ -239,12 +259,12 @@ function spawnObstacle() {
     obsWidth = fireBase * 1.3;
     obsHeight = fireBase * 0.9;
 
-    // ★中段はナシ。下 or 上だけ
-    const mode = Math.random() < 0.5 ? 0 : 2; // 0:下 2:上
+    // 0: 下段, 2: 上段（中段は使わない）
+    const mode = Math.random() < 0.5 ? 0 : 2;
     if (mode === 0) {
-      obsY = getGroundY() - obsHeight - 4; // 下段
+      obsY = getGroundY() - obsHeight - 4;
     } else {
-      obsY = getGroundY() - obsHeight - player.height * 1.2; // 上段
+      obsY = getGroundY() - obsHeight - player.baseHeight * 1.2;
     }
 
     obsSpeed = obsSpeed * 1.3;
@@ -269,13 +289,23 @@ function resetRescueTimer() {
 }
 
 function spawnRescue() {
-  const size = player.height * 0.6;
+  const baseSize = player?.baseHeight || player?.height || 80;
+  const size = baseSize * 0.6;
   const x = canvas.width + 40;
   const y = getGroundY() - size - 4;
   const speed = 240 * difficulty;
 
   rescues.push({ x, y, width: size, height: size, speed });
   resetRescueTimer();
+}
+
+// ★ 救助時のバフ付与（サイズ1.5倍 & ジャンプ1.2倍 を5秒）
+function applyRescueBuff(nowMs) {
+  const dur = BUFF_DURATION_MS;
+
+  // すでにバフ中なら時間を加算、切れていたら今から5秒
+  sizeBoostUntil = nowMs < sizeBoostUntil ? sizeBoostUntil + dur : nowMs + dur;
+  jumpBoostUntil = nowMs < jumpBoostUntil ? jumpBoostUntil + dur : nowMs + dur;
 }
 
 // ---------- ゲームリセット ----------
@@ -300,6 +330,9 @@ function resetGame() {
   rescueCount = 0;
   if (rescueCountEl) rescueCountEl.textContent = "0";
 
+  sizeBoostUntil = 0;
+  jumpBoostUntil = 0;
+
   currentTimeEl.textContent = "0.00";
   bestTimeEl.textContent = bestTime.toFixed(2);
   messageEl.textContent = "画面タップ or スペースキーでスタート＆ジャンプ！";
@@ -317,7 +350,11 @@ function handleJump() {
   if (gameOver) return;
 
   if (player.jumpCount < player.maxJumps) {
-    player.vy = player.jumpPower;
+    const now = performance.now();
+    const jumpBuffActive = now < jumpBoostUntil;
+    const jumpMul = jumpBuffActive ? 1.2 : 1.0;
+
+    player.vy = player.baseJumpPower * jumpMul;
     player.onGround = false;
     player.jumpCount++;
     playJumpSe();
@@ -349,6 +386,12 @@ function update(delta) {
   currentTimeEl.textContent = scoreTime.toFixed(2);
 
   difficulty = 1 + currentTime * 0.03;
+
+  // ★ バフによるサイズ変更
+  const sizeBuffActive = now < sizeBoostUntil;
+  const sizeMul = sizeBuffActive ? 1.5 : 1.0;
+  player.width = player.baseWidth * sizeMul;
+  player.height = player.baseHeight * sizeMul;
 
   // プレイヤー
   player.vy += player.gravity * delta;
@@ -397,10 +440,11 @@ function update(delta) {
       rescues.splice(i, 1);
       rescueCount++;
       if (rescueCountEl) rescueCountEl.textContent = String(rescueCount);
+      applyRescueBuff(now); // ★バフ付与
     }
   }
 
-  // 障害物との衝突判定
+  // 衝突判定
   if (!collidedObstacle) {
     const p = pHit;
     for (const obs of obstacles) {
@@ -511,12 +555,15 @@ function drawObstacle(obs) {
 
 // ---------- 描画 ----------
 function draw() {
+  // 空
   ctx.fillStyle = "#6ec9ff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // 遠景
   ctx.fillStyle = "rgba(255,255,255,0.35)";
   bgFarBlocks.forEach((b) => ctx.fillRect(b.x, b.y, b.width, b.height));
 
+  // 近景
   ctx.fillStyle = "rgba(255,255,255,0.7)";
   bgNearBlocks.forEach((b) => ctx.fillRect(b.x, b.y, b.width, b.height));
 
@@ -540,7 +587,9 @@ function draw() {
         ctx.fillStyle = "#ffccff";
         ctx.fillRect(r.x, r.y, r.width, r.height);
       }
-    } catch (_) {}
+    } catch (e) {
+      console.log("draw rescue error:", e);
+    }
   });
 
   // プレイヤー
@@ -551,7 +600,9 @@ function draw() {
       ctx.fillStyle = "#ffd400";
       ctx.fillRect(player.x, player.y, player.width, player.height);
     }
-  } catch (_) {}
+  } catch (e) {
+    console.log("draw player error:", e);
+  }
 
   // 障害物
   obstacles.forEach(drawObstacle);
@@ -662,12 +713,12 @@ async function submitScore(timeSec) {
 
 // ---------- 画面切り替え ----------
 function showRankingView() {
-  viewRanking.style.display = "block";
-  viewGame.style.display = "none";
+  viewRanking.classList.add("active");
+  viewGame.classList.remove("active");
 }
 function showGameView() {
-  viewRanking.style.display = "none";
-  viewGame.style.display = "block";
+  viewRanking.classList.remove("active");
+  viewGame.classList.add("active");
 }
 
 startBtn.addEventListener("click", () => {
