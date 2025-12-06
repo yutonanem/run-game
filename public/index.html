@@ -2,84 +2,76 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <title>暇つぶしランゲーム</title>
-
-    <!-- スマホ向け基本設定 -->
+    <title>消火とうんこ</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1b255a" />
-
-    <!-- ★ PWA / アイコン関連 ★ -->
-    <!-- manifest（public/manifest.webmanifest） -->
-    <link rel="manifest" href="./manifest.webmanifest" />
-
-    <!-- ブラウザのタブ用アイコン -->
-    <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png" />
-
-    <!-- iPhone のホーム画面用アイコン -->
-    <link rel="apple-touch-icon" href="./icon-192.png" />
-
-    <!-- 既存デザイン -->
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <div class="wrapper">
-      <!-- ===== ランキング画面 ===== -->
-      <div id="view-ranking" class="screen active">
-        <div class="screen-inner">
-          <section class="card ranking-card">
-            <h2 class="screen-title">世界ランキング TOP3</h2>
+    <div class="app-root">
+      <!-- ===== ステージ選択画面 ===== -->
+      <div id="view-select" class="view view-select active">
+        <header class="select-header">
+          <h1 class="app-title">消化とうんこ</h1>
+        </header>
 
-            <table class="ranking-table">
-              <thead>
-                <tr>
-                  <th>順位</th>
-                  <th>ユーザー名</th>
-                  <th>タイム（秒）</th>
-                </tr>
-              </thead>
-              <tbody id="ranking-body">
-                <!-- game.js が埋める -->
-              </tbody>
-            </table>
+        <main class="select-main">
+          <!-- STAGE 1 -->
+          <section class="stage-card">
+            <h2 class="stage-title">STAGE 1：消防士モード（甘め）</h2>
+            <p class="stage-desc">
+              障害物と炎をよけながら、<br />
+              困っている人を救助しよう。
+            </p>
+            <button id="stage1-btn" class="stage-btn">STAGE 1 をプレイ</button>
           </section>
 
-          <div class="start-panel">
-            <input
-              id="username-input"
-              class="username-input"
-              type="text"
-              maxlength="12"
-              placeholder="ユーザー名を入力（必須）"
-            />
-            <button id="start-btn" class="primary-btn start-btn">
-              ゲームスタート
+          <!-- STAGE 2 -->
+          <section class="stage-card">
+            <h2 class="stage-title">STAGE 2：清掃員モード（激辛）</h2>
+            <p class="stage-desc">
+              うんちを回収しながら街を疾走！<br />
+              集めた数で称号が変わる…！
+            </p>
+            <button id="stage2-btn" class="stage-btn stage-btn-locked">
+              STAGE 2 をプレイ
             </button>
-          </div>
-        </div>
+            <p class="stage-note">
+              ※ STAGE 1 をクリア（100秒到達）すると解放されます
+            </p>
+          </section>
+        </main>
       </div>
 
       <!-- ===== ゲーム画面 ===== -->
-      <div id="view-game" class="screen">
-        <div class="screen-inner">
-          <div class="game-canvas-wrap">
-            <canvas id="gameCanvas"></canvas>
-          </div>
+      <div id="view-game" class="view view-game">
+        <header class="game-header">
+          <button id="back-to-select" class="back-link">← ステージ選択へ戻る</button>
+          <div id="stage-label" class="stage-label">STAGE 1：消防士モード</div>
+        </header>
 
-          <div class="hud-row">
-            <div>今回のタイム：<span id="current-time">0.00</span> 秒</div>
-            <div>ベストタイム：<span id="best-time">0.00</span> 秒</div>
-            <div>救助人数：<span id="rescue-count">0</span> 人</div>
-          </div>
+        <main class="game-main">
+          <div class="game-frame">
+            <div class="canvas-shell">
+              <canvas id="gameCanvas"></canvas>
 
-          <div id="message" class="status">
-            画面タップ or スペースキーでスタート＆ジャンプ！
-          </div>
+              <!-- 画面中央メッセージ（開始前 / 失敗 / 評価） -->
+              <div id="center-message" class="center-message hidden"></div>
 
-          <button id="restart-btn" class="primary-btn restart-btn">
-            もう一度プレイ
-          </button>
-        </div>
+              <!-- 左上ステータス（ステージ1＝タイム、ステージ2＝うんこ数） -->
+              <div id="top-left-status" class="top-left-status"></div>
+            </div>
+
+            <div class="hud-row bottom-info">
+              <div id="bottom-left" class="bottom-text"></div>
+              <div id="bottom-center" class="bottom-text"></div>
+              <div id="bottom-right" class="bottom-text"></div>
+            </div>
+
+            <button id="restart-btn" class="primary-btn restart-btn">
+              もう一度プレイ
+            </button>
+          </div>
+        </main>
       </div>
 
       <!-- ===== BGM / SE ===== -->

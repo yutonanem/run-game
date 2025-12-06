@@ -1,40 +1,56 @@
 // ====== 暇つぶしランゲーム game.js ======
 "use strict";
 
-console.log("game.js v9 (5s buff & more zoom-out) loaded");
+console.log("game.js stage-select + terrain(v2)");
+
+// ---------- 定数 ----------
+const STAGE_FIRE = 1; // 消防士
+const STAGE_CLEAN = 2; // 清掃員
+const CLEAR_TIME_STAGE1 = 100; // 100秒でクリア
+
+// ジャンプ力（元の 4/5）
+const BASE_JUMP_POWER = -520; // -650 * 0.8
 
 // ---------- 画面要素 ----------
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-const currentTimeEl = document.getElementById("current-time");
-const bestTimeEl = document.getElementById("best-time");
-const messageEl = document.getElementById("message");
+const viewSelect = document.getElementById("view-select");
+const viewGame = document.getElementById("view-game");
+
+const stage1Btn = document.getElementById("stage1-btn");
+const stage2Btn = document.getElementById("stage2-btn");
+const backToSelectBtn = document.getElementById("back-to-select");
+
+const stageLabelEl = document.getElementById("stage-label");
 const restartBtn = document.getElementById("restart-btn");
 
-// ランキング画面まわり
-const viewRanking = document.getElementById("view-ranking");
-const viewGame = document.getElementById("view-game");
-const rankingBody = document.getElementById("ranking-body");
-const usernameInput = document.getElementById("username-input");
-const startBtn = document.getElementById("start-btn");
+const centerMessageEl = document.getElementById("center-message");
+const topLeftStatusEl = document.getElementById("top-left-status");
 
-// 救助ポイント表示
-const rescueCountEl = document.getElementById("rescue-count");
+const bottomLeftEl = document.getElementById("bottom-left");
+const bottomCenterEl = document.getElementById("bottom-center");
+const bottomRightEl = document.getElementById("bottom-right");
 
 // ---------- 画像 ----------
-const obstacleCustomImg = new Image();
-obstacleCustomImg.src = "obstacle_custom.png";
+const playerFireImg = new Image();
+playerFireImg.src = "firefighter.png";
 
 const fireballImg = new Image();
 fireballImg.src = "fireball.png";
 
-const playerImg = new Image();
-playerImg.src = "firefighter.png";
+const obstacleCustomImg = new Image();
+obstacleCustomImg.src = "obstacle_custom.png";
 
-// 救助対象
 const rescueImg = new Image();
 rescueImg.src = "rescue.png";
+
+// ステージ2用
+const playerCleanerImg = new Image();
+playerCleanerImg.src = "cleaner.png";
+
+const poopImg = new Image();
+poopImg.src = "poop.png";
 
 // ---------- BGM / SE ----------
 const bgmHome = document.getElementById("bgm-home");
@@ -42,31 +58,30 @@ const bgmGame = document.getElementById("bgm-game");
 const seJump = document.getElementById("se-jump");
 const seGameover = document.getElementById("se-gameover");
 
-// ---------- 共通ヘルパー ----------
-
-// 画像が使える状態かチェック（broken 対策）
-function isImageUsable(img) {
+// ---------- ヘルパー ----------
+function isImageReady(img) {
   return !!(img && img.complete && img.naturalWidth > 0);
 }
 
-// 音声再生
 function playAudio(a) {
   if (!a) return;
   try {
     a.currentTime = 0;
     const p = a.play();
-    if (p && p.catch) {
-      p.catch((err) => console.log("audio play error:", err));
-    }
-  } catch (e) {
-    console.log("audio error:", e);
-  }
+    if (p && p.catch) p.catch(() => {});
+  } catch (_) {}
 }
+
 function stopAudio(a) {
   if (!a) return;
   try {
     a.pause();
   } catch (_) {}
+}
+
+function stopAllBgm() {
+  stopAudio(bgmHome);
+  stopAudio(bgmGame);
 }
 
 function playGameBgm() {
@@ -75,13 +90,11 @@ function playGameBgm() {
   bgmGame.loop = true;
   playAudio(bgmGame);
 }
-function stopAllBgm() {
-  stopAudio(bgmHome);
-  stopAudio(bgmGame);
-}
+
 function playJumpSe() {
   playAudio(seJump);
 }
+
 function playGameoverSe() {
   playAudio(seGameover);
 }
@@ -89,9 +102,11 @@ function playGameoverSe() {
 function randRange(min, max) {
   return Math.random() * (max - min) + min;
 }
-function getGroundY() {
-  return canvas.height - 10;
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
 }
+
 function rectsOverlap(a, b) {
   return (
     a.x < b.x + b.width &&
@@ -99,6 +114,11 @@ function rectsOverlap(a, b) {
     a.y < b.y + b.height &&
     a.y + a.height > b.y
   );
+}
+
+// 「基準」の地面ライン（スタート地点の高さ）
+function getGroundY() {
+  return canvas.height - 12;
 }
 
 // ---------- キャンバスサイズ ----------
@@ -116,61 +136,81 @@ window.addEventListener("resize", () => {
 });
 
 // ---------- ゲーム状態 ----------
+let currentStage = STAGE_FIRE;
+let stage1Cleared =
+  localStorage.getItem("runGame_stage1Cleared") === "true" || false;
+
 let player;
 let obstacles = [];
 let bgFarBlocks = [];
 let bgNearBlocks = [];
 
-let rescues = [];
-let rescueSpawnTimer = 0;
-let nextRescueInterval = 0;
+// ★ 地形（地面セグメント）
+let terrainSegments = [];
+const TERRAIN_BASE_SPEED = 200; // 地面スクロール速度
+
+let rescues = []; // ステージ1：救助対象
 let rescueCount = 0;
+
+let poopItems = []; // ステージ2：うんち
+let poopCount = 0;
 
 let gameStarted = false;
 let gameOver = false;
 
 let startTime = 0;
-let currentTime = 0;
-let bestTime = parseFloat(localStorage.getItem("bestTime_runGame") || "0");
+let elapsedTime = 0; // 生の経過秒
 
 let spawnTimer = 0;
 let nextSpawnInterval = 0;
 
-let difficulty = 1;
-let currentUsername = "";
+let rescueSpawnTimer = 0;
+let nextRescueInterval = 0;
 
-// 押されている障害物
+let poopSpawnTimer = 0;
+let nextPoopInterval = 0;
+
+let difficulty = 1;
 let collidedObstacle = null;
 
-// ★ 救助による一時的なパワーアップ（ミリ秒の期限）
-let sizeBoostUntil = 0; // プレイヤーが大きくなる期間
-let jumpBoostUntil = 0; // ジャンプが高くなる期間
-const BUFF_DURATION_MS = 5000; // ★ 5秒に変更
+let bestStage1Time =
+  parseFloat(localStorage.getItem("runGame_bestStage1Time") || "0") || 0;
 
-// ---------- プレイヤー ----------
+// ステージ1のパワーアップ
+let powerupTimer = 0;
+const POWERUP_DURATION = 5000; // ms
+
+function createBasePlayerSize(stage) {
+  const base = Math.min(canvas.width, canvas.height);
+
+  // STAGE 1（消防士）は今まで通り
+  const factorStage1 = 0.18;
+
+  // STAGE 2（清掃員）は少しズームアップ
+  // もっと寄せたければ 0.24 とかに上げてOK
+  const factorStage2 = 0.22;
+
+  return stage === STAGE_CLEAN ? base * factorStage2 : base * factorStage1;
+}
+
 function initPlayer() {
-  // ★ さらに引きの画角に：0.25 → 0.20 に縮小
-  const size = Math.min(canvas.width, canvas.height) * 0.20;
-
+  const size = createBasePlayerSize(currentStage);
   player = {
     x: canvas.width * 0.18,
     y: getGroundY() - size,
     width: size,
     height: size,
-    // ベースサイズを保持（障害物サイズ計算用 & バフの基準）
-    baseWidth: size,
-    baseHeight: size,
-
     vy: 0,
     gravity: 1600,
-    baseJumpPower: -600, // 基本ジャンプ力
+    jumpPower: BASE_JUMP_POWER,
+    onGround: true,
     maxJumps: 3,
     jumpCount: 0,
-    onGround: true
+    baseSize: size,
+    baseJumpPower: BASE_JUMP_POWER
   };
 }
 
-// プレイヤーのヒットボックス（胴体中心だけ）
 function getPlayerHitbox() {
   const hitWidth = player.width * 0.45;
   const hitHeight = player.height * 0.75;
@@ -189,12 +229,11 @@ function getPlayerHitbox() {
 function initBackground() {
   bgFarBlocks = [];
   bgNearBlocks = [];
-
   const groundY = getGroundY();
 
   for (let i = 0; i < 10; i++) {
     const w = 180;
-    const h = canvas.height * randRange(0.12, 0.22);
+    const h = canvas.height * randRange(0.15, 0.28);
     const x = i * 180;
     const y = groundY - canvas.height * 0.55 - h;
     bgFarBlocks.push({ x, y, width: w, height: h, speed: 40 });
@@ -202,11 +241,162 @@ function initBackground() {
 
   for (let i = 0; i < 10; i++) {
     const w = 120;
-    const h = canvas.height * randRange(0.16, 0.23);
+    const h = canvas.height * randRange(0.18, 0.25);
     const x = i * 160 + 40;
     const y = groundY - canvas.height * 0.35 - h;
     bgNearBlocks.push({ x, y, width: w, height: h, speed: 100 });
   }
+}
+
+// ---------- 地形（地面セグメント） ----------
+// type: "ground" or "gap"
+// startOffset / endOffset: getGroundY() からの上下オフセット(px)
+function createTerrainSegment(startX, currentOffset) {
+  const baseSize = player ? player.height : 50;
+  const slopeMax = baseSize * 0.6;
+
+  // ★ 最低高さ＝0（スタート位置）。オフセットは 0〜マイナスの範囲だけ。
+  const minOffset = -slopeMax; // 少し上に上がる
+  const maxOffset = 0;         // これより下には行かない
+
+  let type = "ground";
+  let width;
+  let startOffset = currentOffset;
+  let endOffset = currentOffset;
+
+  const r = Math.random();
+  if (r < 0.55) {
+    // フラット
+    width = randRange(baseSize * 1.2, baseSize * 1.8);
+  } else if (r < 0.75) {
+    // 登り坂（上方向＝マイナス）
+    width = randRange(baseSize * 1.8, baseSize * 2.4);
+    const delta = -randRange(baseSize * 0.3, baseSize * 0.6);
+    endOffset = clamp(currentOffset + delta, minOffset, maxOffset);
+  } else if (r < 0.95) {
+    // 下り坂（下方向＝プラスだが、0 を超えない）
+    width = randRange(baseSize * 1.8, baseSize * 2.4);
+    const delta = randRange(baseSize * 0.3, baseSize * 0.6);
+    endOffset = clamp(currentOffset + delta, minOffset, maxOffset);
+  } else {
+    // 落とし穴
+    type = "gap";
+    width = randRange(baseSize * 0.9, baseSize * 1.5);
+  }
+
+  return { x: startX, width, type, startOffset, endOffset };
+}
+
+function initTerrain() {
+  terrainSegments = [];
+  let curOffset = 0;
+  let x = -50;
+  while (x < canvas.width + 200) {
+    const seg = createTerrainSegment(x, curOffset);
+    terrainSegments.push(seg);
+    x += seg.width;
+    if (seg.type !== "gap") curOffset = seg.endOffset;
+  }
+}
+
+// プレイヤーの真下の地面情報を取得
+function getGroundInfoAtX(x) {
+  const baseY = getGroundY();
+  for (const seg of terrainSegments) {
+    if (x >= seg.x && x <= seg.x + seg.width) {
+      if (seg.type === "gap") {
+        return { isGap: true, y: baseY + 9999 };
+      }
+      const t = seg.width > 0 ? (x - seg.x) / seg.width : 0;
+      const offset =
+        seg.startOffset + (seg.endOffset - seg.startOffset) * t;
+      return { isGap: false, y: baseY + offset };
+    }
+  }
+  return { isGap: false, y: baseY };
+}
+
+function updateTerrain(delta) {
+  const speed = TERRAIN_BASE_SPEED * difficulty;
+
+  terrainSegments.forEach((seg) => {
+    seg.x -= speed * delta;
+  });
+
+  // 左に流れ切ったセグメントを削除
+  while (
+    terrainSegments.length &&
+    terrainSegments[0].x + terrainSegments[0].width < -200
+  ) {
+    terrainSegments.shift();
+  }
+
+  // 右端まで埋める
+  let curOffset = 0;
+  if (terrainSegments.length > 0) {
+    const last = terrainSegments[terrainSegments.length - 1];
+    curOffset = last.type === "gap" ? last.endOffset : last.endOffset;
+  }
+  let x =
+    terrainSegments.length > 0
+      ? terrainSegments[terrainSegments.length - 1].x +
+        terrainSegments[terrainSegments.length - 1].width
+      : -50;
+
+  while (x < canvas.width + 200) {
+    const seg = createTerrainSegment(x, curOffset);
+    terrainSegments.push(seg);
+    x += seg.width;
+    if (seg.type !== "gap") curOffset = seg.endOffset;
+  }
+}
+
+function drawTerrain() {
+  const baseY = getGroundY();
+  const bottom = canvas.height;
+
+  // 黒い線
+  ctx.strokeStyle = "#666";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+
+  let started = false;
+  terrainSegments.forEach((seg) => {
+    if (seg.type === "gap") {
+      started = false;
+      return;
+    }
+    const x1 = seg.x;
+    const x2 = seg.x + seg.width;
+    const y1 = baseY + seg.startOffset;
+    const y2 = baseY + seg.endOffset;
+
+    if (!started) {
+      ctx.moveTo(x1, y1);
+      started = true;
+    } else {
+      ctx.lineTo(x1, y1);
+    }
+    ctx.lineTo(x2, y2);
+  });
+  ctx.stroke();
+
+  // うっすらした地面の影
+  ctx.fillStyle = "rgba(0,0,0,0.05)";
+  terrainSegments.forEach((seg) => {
+    if (seg.type === "gap") return;
+    const x1 = seg.x;
+    const x2 = seg.x + seg.width;
+    const y1 = baseY + seg.startOffset;
+    const y2 = baseY + seg.endOffset;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x2, bottom);
+    ctx.lineTo(x1, bottom);
+    ctx.closePath();
+    ctx.fill();
+  });
 }
 
 // ---------- 障害物 ----------
@@ -228,20 +418,21 @@ function resetSpawnTimer() {
 }
 
 function spawnObstacle() {
-  // ★ 障害物サイズは「ベースのプレイヤーサイズ」を基準にする
-  const baseSize = player?.baseHeight || player?.height || 80;
-
+  const baseSize = player.height;
   const rawWidth = randRange(baseSize * 0.7, baseSize * 1.4);
   const rawHeight = randRange(baseSize * 0.9, baseSize * 1.8);
 
   let obsWidth = rawWidth * 0.4;
   let obsHeight = rawHeight * 0.4;
 
-  let obsY = getGroundY() - obsHeight;
-  const baseSpeed = randRange(260, 360);
+  const spawnX = canvas.width + 20;
+  const groundInfo = getGroundInfoAtX(spawnX);
+  const groundYAtX = groundInfo.y;
+
+  let obsY = groundYAtX - obsHeight;
+  const baseSpeed = randRange(200, 280); // ちょい遅め
   let obsSpeed = baseSpeed * difficulty;
 
-  // 炎の頻度アップ（2つ入れて重みづけ）、中段は無し
   const shapeTypes = [
     "rect",
     "stair",
@@ -259,19 +450,18 @@ function spawnObstacle() {
     obsWidth = fireBase * 1.3;
     obsHeight = fireBase * 0.9;
 
-    // 0: 下段, 2: 上段（中段は使わない）
+    // 上段 or 下段（中段なし）※ 地面高さを基準
     const mode = Math.random() < 0.5 ? 0 : 2;
     if (mode === 0) {
-      obsY = getGroundY() - obsHeight - 4;
+      obsY = groundYAtX - obsHeight - 4;
     } else {
-      obsY = getGroundY() - obsHeight - player.baseHeight * 1.2;
+      obsY = groundYAtX - obsHeight - player.height * 1.2;
     }
-
-    obsSpeed = obsSpeed * 1.3;
+    obsSpeed *= 1.3;
   }
 
   obstacles.push({
-    x: canvas.width + 20,
+    x: spawnX,
     y: obsY,
     width: obsWidth,
     height: obsHeight,
@@ -282,79 +472,163 @@ function spawnObstacle() {
   resetSpawnTimer();
 }
 
-// ---------- 救助 ----------
+// ---------- 救助（ステージ1） ----------
 function resetRescueTimer() {
   nextRescueInterval = randRange(6000, 12000);
   rescueSpawnTimer = 0;
 }
 
 function spawnRescue() {
-  const baseSize = player?.baseHeight || player?.height || 80;
-  const size = baseSize * 0.6;
-  const x = canvas.width + 40;
-  const y = getGroundY() - size - 4;
-  const speed = 240 * difficulty;
+  const size = player.height * 0.6;
+  const spawnX = canvas.width + 40;
+  const groundInfo = getGroundInfoAtX(spawnX);
+  const groundYAtX = groundInfo.y;
+
+  const x = spawnX;
+  const y = groundYAtX - size - 4;
+  const speed = 190 * difficulty; // ちょい遅く
 
   rescues.push({ x, y, width: size, height: size, speed });
   resetRescueTimer();
 }
 
-// ★ 救助時のバフ付与（サイズ1.5倍 & ジャンプ1.2倍 を5秒）
-function applyRescueBuff(nowMs) {
-  const dur = BUFF_DURATION_MS;
-
-  // すでにバフ中なら時間を加算、切れていたら今から5秒
-  sizeBoostUntil = nowMs < sizeBoostUntil ? sizeBoostUntil + dur : nowMs + dur;
-  jumpBoostUntil = nowMs < jumpBoostUntil ? jumpBoostUntil + dur : nowMs + dur;
+// ---------- うんこ（ステージ2） ----------
+function resetPoopTimer() {
+  nextPoopInterval = randRange(450, 900);
+  poopSpawnTimer = 0;
 }
 
-// ---------- ゲームリセット ----------
-function resetGame() {
+function spawnPoop() {
+  const size = player.height * 0.55;
+  const spawnX = canvas.width + 40;
+  const groundInfo = getGroundInfoAtX(spawnX);
+  const groundYAtX = groundInfo.y;
+
+  const x = spawnX;
+  const y = groundYAtX - size;
+  const speed = 210 * difficulty; // ちょい遅く
+
+  poopItems.push({ x, y, width: size, height: size, speed });
+  resetPoopTimer();
+}
+
+// ---------- 画面切り替え ----------
+function showSelectView() {
+  viewSelect.classList.add("active");
+  viewGame.classList.remove("active");
+  stopAllBgm();
+}
+
+function showGameView(stage) {
+  viewSelect.classList.remove("active");
+  viewGame.classList.add("active");
+  currentStage = stage;
+
+  if (stage === STAGE_FIRE) {
+    stageLabelEl.textContent = "STAGE 1：消防士モード";
+  } else {
+    stageLabelEl.textContent = "STAGE 2：清掃員モード";
+  }
+
+  startStage();
+}
+
+// ---------- 中央メッセージ ----------
+function setCenterMessage(text, mode) {
+  if (!centerMessageEl) return;
+  centerMessageEl.className = "center-message";
+
+  if (!text) {
+    centerMessageEl.classList.add("hidden");
+    centerMessageEl.innerHTML = "";
+    return;
+  }
+
+  const inner = document.createElement("div");
+  inner.className = "center-message-inner";
+  inner.innerHTML = text.replace(/\n/g, "<br>");
+  centerMessageEl.innerHTML = "";
+  centerMessageEl.appendChild(inner);
+
+  if (mode === "fail") {
+    centerMessageEl.classList.add("center-message--fail");
+  } else if (mode === "grade") {
+    centerMessageEl.classList.add("center-message--grade");
+  }
+}
+
+function hideCenterMessage() {
+  setCenterMessage("");
+}
+
+// ---------- ステージ開始＆リセット ----------
+function resetCommonState() {
   resizeCanvas();
   initPlayer();
   initBackground();
+  initTerrain(); // ★地形初期化
+
   obstacles = [];
   rescues = [];
+  poopItems = [];
+
+  rescueCount = 0;
+  poopCount = 0;
 
   gameStarted = false;
   gameOver = false;
   collidedObstacle = null;
 
-  currentTime = 0;
+  elapsedTime = 0;
   spawnTimer = 0;
   difficulty = 1;
 
+  powerupTimer = 0;
+
   resetSpawnTimer();
   resetRescueTimer();
+  resetPoopTimer();
 
-  rescueCount = 0;
-  if (rescueCountEl) rescueCountEl.textContent = "0";
+  bottomLeftEl.textContent = "";
+  bottomCenterEl.textContent =
+    "画面タップ or スペースキーでスタート＆ジャンプ！";
+  bottomRightEl.textContent = "";
+}
 
-  sizeBoostUntil = 0;
-  jumpBoostUntil = 0;
+function startStage() {
+  resetCommonState();
 
-  currentTimeEl.textContent = "0.00";
-  bestTimeEl.textContent = bestTime.toFixed(2);
-  messageEl.textContent = "画面タップ or スペースキーでスタート＆ジャンプ！";
+  if (currentStage === STAGE_FIRE) {
+    bottomLeftEl.textContent = "";
+    bottomRightEl.textContent = `救助人数：0人`;
+    topLeftStatusEl.textContent = "00.00";
+
+    setCenterMessage("100秒を目指そう！\n救助活動で +10秒！", null);
+  } else {
+    bottomLeftEl.textContent = "";
+    bottomRightEl.textContent = "";
+    topLeftStatusEl.textContent = "回収うんこ：0個";
+
+    setCenterMessage("多くのうんこを集めよう！", null);
+  }
 }
 
 // ---------- 入力 ----------
 function handleJump() {
-  if (!gameStarted) {
+  if (!viewGame.classList.contains("active")) return;
+  if (!player) return;
+
+  if (!gameStarted && !gameOver) {
     gameStarted = true;
     startTime = performance.now();
-    messageEl.textContent = "";
+    hideCenterMessage();
     playGameBgm();
   }
 
   if (gameOver) return;
 
   if (player.jumpCount < player.maxJumps) {
-    const now = performance.now();
-    const jumpBuffActive = now < jumpBoostUntil;
-    const jumpMul = jumpBuffActive ? 1.2 : 1.0;
-
-    player.vy = player.baseJumpPower * jumpMul;
+    player.vy = player.jumpPower;
     player.onGround = false;
     player.jumpCount++;
     playJumpSe();
@@ -380,30 +654,65 @@ function update(delta) {
   if (!gameStarted || gameOver) return;
 
   const now = performance.now();
-  currentTime = (now - startTime) / 1000;
+  elapsedTime = (now - startTime) / 1000;
 
-  const scoreTime = currentTime + rescueCount * 10;
-  currentTimeEl.textContent = scoreTime.toFixed(2);
+  if (currentStage === STAGE_FIRE) {
+    const scoreTime = elapsedTime + rescueCount * 10;
+    topLeftStatusEl.textContent = scoreTime.toFixed(2);
+    difficulty = 1 + elapsedTime * 0.01;
 
-  difficulty = 1 + currentTime * 0.03;
+    if (!stage1Cleared && scoreTime >= CLEAR_TIME_STAGE1) {
+      stage1Cleared = true;
+      localStorage.setItem("runGame_stage1Cleared", "true");
+      stage2Btn.classList.remove("stage-btn-locked");
+    }
+  } else {
+    topLeftStatusEl.textContent = `回収うんこ：${poopCount}個`;
+    difficulty = 1 + elapsedTime * 0.015;
+  }
 
-  // ★ バフによるサイズ変更
-  const sizeBuffActive = now < sizeBoostUntil;
-  const sizeMul = sizeBuffActive ? 1.5 : 1.0;
-  player.width = player.baseWidth * sizeMul;
-  player.height = player.baseHeight * sizeMul;
+  // パワーアップ（ステージ1）
+  if (currentStage === STAGE_FIRE && powerupTimer > 0) {
+    powerupTimer -= delta * 1000;
+    const t = Math.max(powerupTimer, 0) / POWERUP_DURATION;
+    const scale = 1 + 0.5 * t;
+    const jumpScale = 1 + 0.2 * t;
 
-  // プレイヤー
+    player.width = player.baseSize * scale;
+    player.height = player.baseSize * scale;
+    player.jumpPower = player.baseJumpPower * jumpScale;
+  } else if (currentStage === STAGE_FIRE && powerupTimer <= 0) {
+    player.width = player.baseSize;
+    player.height = player.baseSize;
+    player.jumpPower = player.baseJumpPower;
+  }
+
+  // 重力
   player.vy += player.gravity * delta;
   player.y += player.vy * delta;
 
-  const groundY = getGroundY() - player.height;
-  if (player.y >= groundY) {
-    player.y = groundY;
-    player.vy = 0;
-    if (!player.onGround) {
-      player.onGround = true;
-      player.jumpCount = 0;
+  // 地形更新
+  updateTerrain(delta);
+
+  // 足元の地面にスナップ or 穴なら落下
+  const centerX = player.x + player.width / 2;
+  const groundInfo = getGroundInfoAtX(centerX);
+
+  if (!groundInfo.isGap) {
+    const gy = groundInfo.y - player.height;
+    if (player.y >= gy) {
+      player.y = gy;
+      player.vy = 0;
+      if (!player.onGround) {
+        player.onGround = true;
+        player.jumpCount = 0;
+      }
+    }
+  } else {
+    // 穴の中を落下して画面外に出たらゲームオーバー
+    if (player.y > canvas.height) {
+      endGame(false);
+      return;
     }
   }
 
@@ -425,218 +734,199 @@ function update(delta) {
     obs.x -= obs.speed * delta;
   });
 
-  // 救助
-  rescueSpawnTimer += delta * 1000;
-  if (rescueSpawnTimer >= nextRescueInterval) spawnRescue();
-  rescues.forEach((r) => {
-    r.x -= r.speed * delta;
-  });
+  // 救助 / うんこ
+  if (currentStage === STAGE_FIRE) {
+    rescueSpawnTimer += delta * 1000;
+    if (rescueSpawnTimer >= nextRescueInterval) spawnRescue();
 
-  // 救助判定
-  const pHit = getPlayerHitbox();
-  for (let i = rescues.length - 1; i >= 0; i--) {
-    const r = rescues[i];
-    if (rectsOverlap(pHit, r)) {
-      rescues.splice(i, 1);
-      rescueCount++;
-      if (rescueCountEl) rescueCountEl.textContent = String(rescueCount);
-      applyRescueBuff(now); // ★バフ付与
+    rescues.forEach((r) => {
+      r.x -= r.speed * delta;
+    });
+
+    const pHit = getPlayerHitbox();
+    for (let i = rescues.length - 1; i >= 0; i--) {
+      const r = rescues[i];
+      if (rectsOverlap(pHit, r)) {
+        rescues.splice(i, 1);
+        rescueCount++;
+        bottomRightEl.textContent = `救助人数：${rescueCount}人`;
+        powerupTimer = POWERUP_DURATION;
+      }
+    }
+  } else {
+    poopSpawnTimer += delta * 1000;
+    if (poopSpawnTimer >= nextPoopInterval) spawnPoop();
+
+    poopItems.forEach((p) => {
+      p.x -= p.speed * delta;
+    });
+
+    const pHit = getPlayerHitbox();
+    for (let i = poopItems.length - 1; i >= 0; i--) {
+      const p = poopItems[i];
+      if (rectsOverlap(pHit, p)) {
+        poopItems.splice(i, 1);
+        poopCount++;
+        topLeftStatusEl.textContent = `回収うんこ：${poopCount}個`;
+      }
     }
   }
 
-  // 衝突判定
+  // 障害物との押し込み衝突
+  const pHit2 = getPlayerHitbox();
   if (!collidedObstacle) {
-    const p = pHit;
     for (const obs of obstacles) {
       const o = getObstacleHitbox(obs);
-      if (rectsOverlap(p, o)) {
+      if (rectsOverlap(pHit2, o)) {
         collidedObstacle = obs;
         break;
       }
     }
   }
 
-  // 押される処理
   if (collidedObstacle) {
     player.x = collidedObstacle.x - player.width + 4;
     if (player.x + player.width <= 0) {
-      endGame();
+      endGame(false);
     }
   }
 
-  // クリーンアップ
   obstacles = obstacles.filter((obs) => obs.x + obs.width > -200);
   rescues = rescues.filter((r) => r.x + r.width > -200);
-}
-
-// ---------- 障害物描画 ----------
-function drawObstacle(obs) {
-  try {
-    if (obs.shape === "fireball") {
-      if (isImageUsable(fireballImg)) {
-        ctx.save();
-        ctx.translate(obs.x + obs.width / 2, obs.y + obs.height / 2);
-        ctx.rotate((-15 * Math.PI) / 180);
-        ctx.drawImage(
-          fireballImg,
-          -obs.width / 2,
-          -obs.height / 2,
-          obs.width,
-          obs.height
-        );
-        ctx.restore();
-      } else {
-        ctx.fillStyle = "#ff6600";
-        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-      }
-      return;
-    }
-
-    if (obs.shape === "image") {
-      if (isImageUsable(obstacleCustomImg)) {
-        ctx.drawImage(obstacleCustomImg, obs.x, obs.y, obs.width, obs.height);
-      } else {
-        ctx.fillStyle = "#666";
-        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-      }
-      return;
-    }
-
-    ctx.fillStyle = "#555";
-
-    switch (obs.shape) {
-      case "stair": {
-        const steps = 3;
-        for (let i = 0; i < steps; i++) {
-          const w = (obs.width / steps) * (i + 1);
-          const h = (obs.height / steps) * (i + 1);
-          const x = obs.x + obs.width - w;
-          const y = obs.y + obs.height - h;
-          ctx.fillRect(x, y, w, h);
-        }
-        break;
-      }
-      case "triangle": {
-        ctx.beginPath();
-        ctx.moveTo(obs.x, obs.y + obs.height);
-        ctx.lineTo(obs.x + obs.width / 2, obs.y);
-        ctx.lineTo(obs.x + obs.width, obs.y + obs.height);
-        ctx.fill();
-        break;
-      }
-      case "dome": {
-        const baseH = obs.height * 0.35;
-        const domeH = obs.height - baseH;
-        ctx.fillRect(obs.x, obs.y + domeH, obs.width, baseH);
-
-        const cx = obs.x + obs.width / 2;
-        const cy = obs.y + domeH;
-        const r = Math.min(obs.width, domeH * 2) / 2;
-
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, Math.PI, 0);
-        ctx.fill();
-        break;
-      }
-      case "pole": {
-        const pw = obs.width * 0.3;
-        const px = obs.x + (obs.width - pw) / 2;
-        ctx.fillRect(px, obs.y, pw, obs.height);
-        ctx.fillRect(px - pw, obs.y, pw * 3, obs.height * 0.1);
-        break;
-      }
-      default:
-        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-    }
-  } catch (e) {
-    console.log("drawObstacle error:", e);
-  }
+  poopItems = poopItems.filter((p) => p.x + p.width > -200);
 }
 
 // ---------- 描画 ----------
+function drawObstacle(obs) {
+  if (obs.shape === "fireball") {
+    if (isImageReady(fireballImg)) {
+      ctx.save();
+      ctx.translate(obs.x + obs.width / 2, obs.y + obs.height / 2);
+      ctx.rotate((-15 * Math.PI) / 180);
+      ctx.drawImage(
+        fireballImg,
+        -obs.width / 2,
+        -obs.height / 2,
+        obs.width,
+        obs.height
+      );
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#ff7043";
+      ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+    }
+    return;
+  }
+
+  if (obs.shape === "image") {
+    if (isImageReady(obstacleCustomImg)) {
+      ctx.drawImage(obstacleCustomImg, obs.x, obs.y, obs.width, obs.height);
+    } else {
+      ctx.fillStyle = "#666";
+      ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+    }
+    return;
+  }
+
+  ctx.fillStyle = "#607d8b";
+
+  switch (obs.shape) {
+    case "stair": {
+      const steps = 3;
+      for (let i = 0; i < steps; i++) {
+        const w = (obs.width / steps) * (i + 1);
+        const h = (obs.height / steps) * (i + 1);
+        const x = obs.x + obs.width - w;
+        const y = obs.y + obs.height - h;
+        ctx.fillRect(x, y, w, h);
+      }
+      break;
+    }
+    case "triangle": {
+      ctx.beginPath();
+      ctx.moveTo(obs.x, obs.y + obs.height);
+      ctx.lineTo(obs.x + obs.width / 2, obs.y);
+      ctx.lineTo(obs.x + obs.width, obs.y + obs.height);
+      ctx.fill();
+      break;
+    }
+    case "dome": {
+      const baseH = obs.height * 0.35;
+      const domeH = obs.height - baseH;
+      ctx.fillRect(obs.x, obs.y + domeH, obs.width, baseH);
+
+      const cx = obs.x + obs.width / 2;
+      const cy = obs.y + domeH;
+      const r = Math.min(obs.width, domeH * 2) / 2;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, Math.PI, 0);
+      ctx.fill();
+      break;
+    }
+    case "pole": {
+      const pw = obs.width * 0.3;
+      const px = obs.x + (obs.width - pw) / 2;
+      ctx.fillRect(px, obs.y, pw, obs.height);
+      ctx.fillRect(px - pw, obs.y, pw * 3, obs.height * 0.1);
+      break;
+    }
+    default:
+      ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+  }
+}
+
 function draw() {
-  // 空
-  ctx.fillStyle = "#6ec9ff";
+  if (!player) return;
+
+  ctx.fillStyle = "#8fd4ff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 遠景
   ctx.fillStyle = "rgba(255,255,255,0.35)";
   bgFarBlocks.forEach((b) => ctx.fillRect(b.x, b.y, b.width, b.height));
 
-  // 近景
   ctx.fillStyle = "rgba(255,255,255,0.7)";
   bgNearBlocks.forEach((b) => ctx.fillRect(b.x, b.y, b.width, b.height));
 
-  const groundY = getGroundY();
-  ctx.strokeStyle = "#666";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, groundY);
-  ctx.lineTo(canvas.width, groundY);
-  ctx.stroke();
+  // 地形（黒い線＋地面の影）
+  drawTerrain();
 
-  ctx.fillStyle = "rgba(0,0,0,0.05)";
-  ctx.fillRect(0, groundY, canvas.width, 40);
-
-  // 救助キャラ
-  rescues.forEach((r) => {
-    try {
-      if (isImageUsable(rescueImg)) {
+  // 救助 or うんこ
+  if (currentStage === STAGE_FIRE) {
+    rescues.forEach((r) => {
+      if (isImageReady(rescueImg)) {
         ctx.drawImage(rescueImg, r.x, r.y, r.width, r.height);
       } else {
         ctx.fillStyle = "#ffccff";
         ctx.fillRect(r.x, r.y, r.width, r.height);
       }
-    } catch (e) {
-      console.log("draw rescue error:", e);
-    }
-  });
+    });
+  } else {
+    poopItems.forEach((p) => {
+      if (isImageReady(poopImg)) {
+        ctx.drawImage(poopImg, p.x, p.y, p.width, p.height);
+      } else {
+        ctx.fillStyle = "#8d6e63";
+        ctx.fillRect(p.x, p.y, p.width, p.height);
+      }
+    });
+  }
 
   // プレイヤー
-  try {
-    if (isImageUsable(playerImg)) {
-      ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
-    } else {
-      ctx.fillStyle = "#ffd400";
-      ctx.fillRect(player.x, player.y, player.width, player.height);
-    }
-  } catch (e) {
-    console.log("draw player error:", e);
+  const img =
+    currentStage === STAGE_FIRE ? playerFireImg : playerCleanerImg;
+  if (isImageReady(img)) {
+    ctx.drawImage(img, player.x, player.y, player.width, player.height);
+  } else {
+    ctx.fillStyle = "#ffd400";
+    ctx.fillRect(player.x, player.y, player.width, player.height);
   }
 
   // 障害物
   obstacles.forEach(drawObstacle);
-
-  // GAME OVER
-  if (gameOver) {
-    ctx.save();
-    ctx.fillStyle = "rgba(0,0,0,0.4)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
-    const r = Math.min(canvas.width, canvas.height) * 0.22;
-
-    ctx.beginPath();
-    ctx.fillStyle = "#fff";
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = "#ff5252";
-    ctx.lineWidth = r * 0.12;
-    ctx.stroke();
-
-    ctx.fillStyle = "#ff5252";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = `${r * 0.45}px "Segoe UI", sans-serif`;
-    ctx.fillText("GAME", cx, cy - r * 0.25);
-    ctx.fillText("OVER!!", cx, cy + r * 0.15);
-
-    ctx.restore();
-  }
 }
 
+// ---------- ループ ----------
 function loop(timestamp) {
   const delta = (timestamp - lastTime) / 1000 || 0;
   lastTime = timestamp;
@@ -648,118 +938,73 @@ function loop(timestamp) {
 }
 requestAnimationFrame(loop);
 
-// ---------- ランキング ----------
-async function loadRanking() {
-  try {
-    const res = await fetch("/api/ranking");
-    if (!res.ok) throw new Error("failed to fetch ranking");
-    const data = await res.json();
-
-    rankingBody.innerHTML = "";
-    const list = data.ranking || [];
-
-    if (list.length === 0) {
-      const tr = document.createElement("tr");
-      const td = document.createElement("td");
-      td.colSpan = 3;
-      td.textContent = "まだ記録がありません";
-      tr.appendChild(td);
-      rankingBody.appendChild(tr);
-      return;
-    }
-
-    list.slice(0, 3).forEach((item, index) => {
-      const tr = document.createElement("tr");
-
-      const rankTd = document.createElement("td");
-      rankTd.textContent = index + 1;
-
-      const nameTd = document.createElement("td");
-      nameTd.textContent = item.username;
-
-      const timeTd = document.createElement("td");
-      timeTd.textContent = item.time.toFixed(2);
-
-      tr.appendChild(rankTd);
-      tr.appendChild(nameTd);
-      tr.appendChild(timeTd);
-      rankingBody.appendChild(tr);
-    });
-  } catch (e) {
-    console.error(e);
-    rankingBody.innerHTML = "";
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 3;
-    td.textContent = "ランキング読み込みに失敗しました";
-    tr.appendChild(td);
-    rankingBody.appendChild(tr);
-  }
-}
-
-async function submitScore(timeSec) {
-  if (!currentUsername) return;
-  try {
-    await fetch("/api/ranking", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: currentUsername, time: timeSec })
-    });
-    await loadRanking();
-  } catch (e) {
-    console.error("submitScore error", e);
-  }
-}
-
-// ---------- 画面切り替え ----------
-function showRankingView() {
-  viewRanking.classList.add("active");
-  viewGame.classList.remove("active");
-}
-function showGameView() {
-  viewRanking.classList.remove("active");
-  viewGame.classList.add("active");
-}
-
-startBtn.addEventListener("click", () => {
-  const name = usernameInput.value.trim();
-  if (!name) {
-    alert("ユーザー名を入力してください");
-    return;
-  }
-  currentUsername = name;
-  showGameView();
-  resetGame();
-});
-
-restartBtn.addEventListener("click", () => {
-  resetGame();
-});
-
 // ---------- ゲームオーバー ----------
-function endGame() {
+function endGame(isClearStage2) {
   if (gameOver) return;
-
   gameOver = true;
+
   playGameoverSe();
   stopAllBgm();
 
-  const finalScoreTime = currentTime + rescueCount * 10;
+  if (currentStage === STAGE_FIRE) {
+    const scoreTime = elapsedTime + rescueCount * 10;
+    if (scoreTime > bestStage1Time) {
+      bestStage1Time = scoreTime;
+      localStorage.setItem(
+        "runGame_bestStage1Time",
+        String(bestStage1Time)
+      );
+    }
 
-  if (finalScoreTime > bestTime) {
-    bestTime = finalScoreTime;
-    localStorage.setItem("bestTime_runGame", String(bestTime));
+    bottomLeftEl.textContent = `今回のタイム：${scoreTime.toFixed(2)} 秒`;
+    bottomCenterEl.textContent = "";
+    bottomRightEl.textContent = `救助人数：${rescueCount}人`;
+
+    if (scoreTime >= CLEAR_TIME_STAGE1) {
+      setCenterMessage("クリア！", "grade");
+      stage1Cleared = true;
+      localStorage.setItem("runGame_stage1Cleared", "true");
+      stage2Btn.classList.remove("stage-btn-locked");
+    } else {
+      setCenterMessage("失敗！", "fail");
+    }
+  } else {
+    let label = "";
+    if (poopCount <= 20) label = "論外！";
+    else if (poopCount <= 35) label = "出直してこい！";
+    else if (poopCount <= 50) label = "平凡";
+    else if (poopCount <= 65) label = "うんこ博士";
+    else label = "天才なうんこ";
+
+    bottomLeftEl.textContent = "";
+    bottomCenterEl.textContent = "";
+    bottomRightEl.textContent = `回収うんこ：${poopCount}個`;
+
+    setCenterMessage(label, "grade");
   }
-  bestTimeEl.textContent = bestTime.toFixed(2);
-
-  messageEl.textContent =
-    `ゲームオーバー！ 走行タイム：${finalScoreTime.toFixed(2)} 秒 ` +
-    `(救助 ${rescueCount} 人)`;
-
-  submitScore(finalScoreTime);
 }
 
+// ---------- ボタンイベント ----------
+stage1Btn.addEventListener("click", () => {
+  showGameView(STAGE_FIRE);
+});
+
+stage2Btn.addEventListener("click", () => {
+  if (!stage1Cleared) return;
+  showGameView(STAGE_CLEAN);
+});
+
+backToSelectBtn.addEventListener("click", () => {
+  showSelectView();
+});
+
+restartBtn.addEventListener("click", () => {
+  startStage();
+});
+
 // ---------- 初期化 ----------
-loadRanking();
-showRankingView();
-resetGame();
+if (stage1Cleared) {
+  stage2Btn.classList.remove("stage-btn-locked");
+}
+
+showSelectView();

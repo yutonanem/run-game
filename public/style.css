@@ -1,273 +1,312 @@
-/* ---------- ベース ---------- */
 * {
   box-sizing: border-box;
 }
 
 html,
 body {
-  height: 100%;
   margin: 0;
   padding: 0;
+  height: 100%;
 }
 
 body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    "Helvetica Neue", Arial, sans-serif;
-  color: #0b1020;
+    sans-serif;
+  background: #ffe5ec;
 }
 
-/* 画面全体を覆うラッパー（テトリス風背景込み） */
-.wrapper {
-  position: relative;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
+/* ルート */
+.app-root {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  padding: 12px;
 }
 
-/* テトリス風カラーブロック背景 */
-.wrapper::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  /* 赤・青・黄のブロックが斜めに積み重なった感じ */
-  background-image: repeating-linear-gradient(
-      45deg,
-      #ff6b6b 0px,
-      #ff6b6b 48px,
-      #4dabf7 48px,
-      #4dabf7 96px,
-      #ffd93b 96px,
-      #ffd93b 144px
-    );
-  background-size: 160px 160px;
-  opacity: 0.4;
-}
-
-/* 少しグラデーションをかけて奥行きを出す */
-.wrapper::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.35), transparent 60%),
-    radial-gradient(
-      circle at 100% 100%,
-      rgba(3, 7, 30, 0.9),
-      rgba(3, 7, 30, 0.95)
-    );
-  mix-blend-mode: soft-light;
-}
-
-/* 実際の画面エリア */
-.screen {
-  position: relative;
-  z-index: 1;
+/* 共通ビュー枠 */
+.view {
   width: 100%;
-  height: 100%;
+  max-width: 1080px;
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
   display: none;
-  padding: 20px 20px 24px;
 }
 
-.screen.active {
+.view.active {
   display: block;
 }
 
-.screen-inner {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+/* ===== ステージ選択画面 ===== */
+
+.view-select {
+  background-image: repeating-linear-gradient(
+      -45deg,
+      #ffb6c1,
+      #ffb6c1 16px,
+      transparent 16px,
+      transparent 32px
+    ),
+    repeating-linear-gradient(
+      45deg,
+      #b3e5fc,
+      #b3e5fc 16px,
+      transparent 16px,
+      transparent 32px
+    );
+  background-size: 32px 32px;
 }
 
-/* ---------- 共通カード ---------- */
-.card {
-  background: rgba(255, 255, 255, 0.96);
-  border-radius: 20px;
-  padding: 16px 18px;
-  box-shadow: 0 18px 45px rgba(3, 7, 30, 0.4);
-  backdrop-filter: blur(8px);
+.select-header {
+  padding: 20px 28px 8px;
 }
 
-/* ---------- ランキング画面 ---------- */
-
-.screen-title {
-  margin: 0 0 10px;
-  text-align: center;
-  font-size: 18px;
-  letter-spacing: 0.05em;
+.app-title {
+  margin: 0;
+  font-size: 32px;
+  letter-spacing: 0.08em;
 }
 
-/* ランキングテーブル */
-.ranking-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
+.select-main {
+  padding: 0 24px 24px;
 }
 
-.ranking-table th,
-.ranking-table td {
-  border: 1px solid #e1e6f0;
-  padding: 8px 6px;
-  text-align: center;
+.stage-card {
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 24px;
+  padding: 20px 22px 22px;
+  margin-bottom: 18px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
 }
 
-.ranking-table th {
-  background: #f5f7ff;
-  font-weight: 600;
+.stage-title {
+  margin: 0 0 6px;
+  font-size: 22px;
 }
 
-/* 「まだ記録がありません」行用 */
-.ranking-table td[colspan] {
-  color: #7c8499;
-}
-
-/* スタートパネル（画面下部に固定気味） */
-.start-panel {
-  margin-top: auto;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 0 4px;
-}
-
-.username-input {
-  flex: 1;
-  max-width: 260px;
-  padding: 10px 14px;
-  border-radius: 999px;
-  border: none;
+.stage-desc {
+  margin: 0 0 14px;
   font-size: 14px;
-  box-shadow: 0 8px 20px rgba(3, 7, 30, 0.35);
-  outline: none;
+  line-height: 1.6;
 }
 
-.username-input::placeholder {
-  color: #9aa4bf;
+.stage-note {
+  margin: 8px 6px 0;
+  font-size: 12px;
+  color: #d26b00;
 }
 
-/* ---------- ボタン共通 ---------- */
-
-.primary-btn {
+.stage-btn {
+  display: block;
+  width: 100%;
   border: none;
   border-radius: 999px;
-  padding: 10px 24px;
-  font-size: 15px;
-  font-weight: 600;
+  padding: 13px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
   cursor: pointer;
-  color: #ffffff;
-  background: linear-gradient(135deg, #2563eb, #4f46e5);
-  box-shadow: 0 12px 25px rgba(37, 99, 235, 0.6);
-  transition: transform 0.08s ease, box-shadow 0.08s ease,
-    filter 0.08s ease;
+  background: linear-gradient(90deg, #ffb11b, #ff8c00);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(255, 140, 0, 0.4);
 }
 
-.primary-btn:hover {
-  filter: brightness(1.05);
-  box-shadow: 0 16px 32px rgba(37, 99, 235, 0.7);
+.stage-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 4px 10px rgba(255, 140, 0, 0.4);
+}
+
+/* ロック中ボタン */
+.stage-btn-locked {
+  background: #ffe0b3;
+  color: #c97a1f;
+  box-shadow: none;
+  cursor: default;
+}
+
+/* ===== ゲーム画面 ===== */
+
+.view-game {
+  background: repeating-linear-gradient(
+      -45deg,
+      #ffb6c1,
+      #ffb6c1 18px,
+      transparent 18px,
+      transparent 36px
+    ),
+    repeating-linear-gradient(
+      45deg,
+      #d1c4e9,
+      #d1c4e9 18px,
+      transparent 18px,
+      transparent 36px
+    );
+  background-size: 36px 36px;
+}
+
+.game-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px 4px;
+}
+
+/* ★ 戻るボタン：サイズほぼそのまま、視認性アップ */
+.back-link {
+  border: none;
+  background: rgba(255, 255, 255, 0.95);
+  color: #1a73e8;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.back-link:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.stage-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.game-main {
+  padding: 0 14px 16px;
+}
+
+.game-frame {
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 24px;
+  padding: 14px 14px 18px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.15);
+}
+
+/* キャンバス外枠（角丸の空色部分） */
+.canvas-shell {
+  border-radius: 22px;
+  overflow: hidden;
+  background: linear-gradient(#8fd4ff, #bfe8ff);
+  position: relative;
+}
+
+/* キャンバス自体（中身） */
+#gameCanvas {
+  display: block;
+  width: 100%;
+  height: min(60vh, 420px);
+}
+
+/* 下部情報行 */
+.hud-row.bottom-info {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.bottom-text {
+  min-width: 0;
+}
+
+/* リスタートボタン */
+.primary-btn {
+  display: block;
+  margin: 12px auto 0;
+  padding: 9px 28px;
+  border-radius: 999px;
+  border: none;
+  font-size: 16px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #203a93, #101c4f);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgba(16, 28, 79, 0.45);
 }
 
 .primary-btn:active {
   transform: translateY(1px);
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.55);
+  box-shadow: 0 5px 14px rgba(16, 28, 79, 0.55);
 }
 
-.start-btn {
-  min-width: 140px;
-}
+/* ===== 画面中央メッセージ ===== */
 
-/* ---------- ゲーム画面 ---------- */
-
-.game-canvas-wrap {
-  flex: 1;
-  min-height: 0;
-  border-radius: 22px;
-  padding: 6px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 18px 45px rgba(3, 7, 30, 0.45);
+.center-message {
+  position: absolute;
+  inset: 0;
   display: flex;
-}
-
-#gameCanvas {
-  width: 100%;
-  height: 100%;
-  border-radius: 18px;
-  display: block;
-  background: linear-gradient(#8ed6ff, #f0fbff);
-}
-
-/* HUD（タイムと救助人数） */
-.hud-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 14px;
-  color: #1f2933;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-
-.hud-row span {
-  font-weight: 700;
-}
-
-/* メッセージ */
-.status {
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  font-size: 14px;
-  margin-top: 2px;
-  color: #1f2933;
+  pointer-events: none;
 }
 
-/* リスタートボタン */
-.restart-btn {
-  margin: 6px auto 4px;
-  padding-inline: 40px;
+.center-message.hidden {
+  display: none;
 }
 
-/* ---------- レスポンシブ ---------- */
+.center-message-inner {
+  max-width: 80%;
+  padding: 18px 22px;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-weight: 700;
+  line-height: 1.6;
+  font-size: clamp(20px, 3vw, 26px);
+}
 
+/* ★ 失敗・評価用：3倍＆赤太文字ベース ★ */
+.center-message--fail .center-message-inner,
+.center-message--grade .center-message-inner {
+  background: rgba(255, 255, 255, 0.98);
+  color: #e60033; /* 濃い目の赤 */
+  border: 4px solid #ff1744;
+  box-shadow: 0 0 0 6px rgba(255, 23, 68, 0.25),
+    0 18px 40px rgba(0, 0, 0, 0.4);
+  font-size: clamp(48px, 8vw, 72px); /* ほぼ3倍サイズ */
+}
+
+/* 左上ステータス（タイム / うんこ数） */
+.top-left-status {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  padding: 6px 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.32);
+  color: #ffffff;
+  font-size: 20px; /* 元の2倍イメージ */
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+/* スマホ向け調整 */
 @media (max-width: 768px) {
-  .screen {
-    padding: 14px 10px 18px;
+  .app-root {
+    padding: 0;
   }
 
-  .card {
-    border-radius: 18px;
-    padding: 14px 14px;
+  .view {
+    border-radius: 0;
   }
 
-  .game-canvas-wrap {
-    border-radius: 18px;
+  .game-frame {
+    border-radius: 0;
   }
 
   #gameCanvas {
-    border-radius: 14px;
+    height: min(56vh, 360px);
   }
 
-  .hud-row {
-    font-size: 13px;
-  }
-
-  .username-input {
-    max-width: none;
-  }
-}
-
-@media (max-width: 480px) {
-  .hud-row {
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-  }
-
-  .start-panel {
-    flex-direction: column;
-  }
-
-  .start-btn,
-  .username-input {
-    width: 100%;
-    max-width: 100%;
+  .top-left-status {
+    font-size: 18px;
   }
 }
