@@ -1,15 +1,13 @@
 // ====== 暇つぶしランゲーム game.js ======
 "use strict";
 
-console.log("game.js stage-select + terrain(v2)");
-
 // ---------- 定数 ----------
 const STAGE_FIRE = 1; // 消防士
 const STAGE_CLEAN = 2; // 清掃員
 const CLEAR_TIME_STAGE1 = 100; // 100秒でクリア
 
 // ジャンプ力（元の 4/5）
-const BASE_JUMP_POWER = -520; // -650 * 0.8
+const BASE_JUMP_POWER = -520;
 
 // ---------- 画面要素 ----------
 const canvas = document.getElementById("gameCanvas");
@@ -145,7 +143,7 @@ let obstacles = [];
 let bgFarBlocks = [];
 let bgNearBlocks = [];
 
-// ★ 地形（地面セグメント）
+// 地形（地面セグメント）
 let terrainSegments = [];
 const TERRAIN_BASE_SPEED = 200; // 地面スクロール速度
 
@@ -180,14 +178,17 @@ let bestStage1Time =
 let powerupTimer = 0;
 const POWERUP_DURATION = 5000; // ms
 
+// UI更新間引き用
+let uiUpdateTimer = 0;
+const UI_UPDATE_INTERVAL = 0.1; // 0.1秒に1回だけDOMを書き換える
+
 function createBasePlayerSize(stage) {
   const base = Math.min(canvas.width, canvas.height);
 
-  // STAGE 1（消防士）は今まで通り
+  // STAGE 1（消防士）
   const factorStage1 = 0.18;
 
   // STAGE 2（清掃員）は少しズームアップ
-  // もっと寄せたければ 0.24 とかに上げてOK
   const factorStage2 = 0.22;
 
   return stage === STAGE_CLEAN ? base * factorStage2 : base * factorStage1;
@@ -211,18 +212,20 @@ function initPlayer() {
   };
 }
 
-function getPlayerHitbox() {
+// ヒットボックス用オブジェクト（毎フレーム再利用）
+const playerHitbox = { x: 0, y: 0, width: 0, height: 0 };
+const obstacleHitbox = { x: 0, y: 0, width: 0, height: 0 };
+
+function fillPlayerHitbox() {
   const hitWidth = player.width * 0.45;
   const hitHeight = player.height * 0.75;
   const offsetX = (player.width - hitWidth) / 2;
   const offsetY = (player.height - hitHeight) / 2;
 
-  return {
-    x: player.x + offsetX,
-    y: player.y + offsetY,
-    width: hitWidth,
-    height: hitHeight
-  };
+  playerHitbox.x = player.x + offsetX;
+  playerHitbox.y = player.y + offsetY;
+  playerHitbox.width = hitWidth;
+  playerHitbox.height = hitHeight;
 }
 
 // ---------- 背景 ----------
@@ -231,7 +234,7 @@ function initBackground() {
   bgNearBlocks = [];
   const groundY = getGroundY();
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 8; i++) {
     const w = 180;
     const h = canvas.height * randRange(0.15, 0.28);
     const x = i * 180;
@@ -239,7 +242,7 @@ function initBackground() {
     bgFarBlocks.push({ x, y, width: w, height: h, speed: 40 });
   }
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 8; i++) {
     const w = 120;
     const h = canvas.height * randRange(0.18, 0.25);
     const x = i * 160 + 40;
@@ -255,9 +258,9 @@ function createTerrainSegment(startX, currentOffset) {
   const baseSize = player ? player.height : 50;
   const slopeMax = baseSize * 0.6;
 
-  // ★ 最低高さ＝0（スタート位置）。オフセットは 0〜マイナスの範囲だけ。
+  // 最低高さ＝0（スタート位置）。オフセットは 0〜マイナスの範囲だけ。
   const minOffset = -slopeMax; // 少し上に上がる
-  const maxOffset = 0;         // これより下には行かない
+  const maxOffset = 0; // これより下には行かない
 
   let type = "ground";
   let width;
@@ -308,8 +311,7 @@ function getGroundInfoAtX(x) {
         return { isGap: true, y: baseY + 9999 };
       }
       const t = seg.width > 0 ? (x - seg.x) / seg.width : 0;
-      const offset =
-        seg.startOffset + (seg.endOffset - seg.startOffset) * t;
+      const offset = seg.startOffset + (seg.endOffset - seg.startOffset) * t;
       return { isGap: false, y: baseY + offset };
     }
   }
@@ -335,7 +337,7 @@ function updateTerrain(delta) {
   let curOffset = 0;
   if (terrainSegments.length > 0) {
     const last = terrainSegments[terrainSegments.length - 1];
-    curOffset = last.type === "gap" ? last.endOffset : last.endOffset;
+    curOffset = last.endOffset;
   }
   let x =
     terrainSegments.length > 0
@@ -381,7 +383,7 @@ function drawTerrain() {
   });
   ctx.stroke();
 
-  // うっすらした地面の影
+  // 地面の影
   ctx.fillStyle = "rgba(0,0,0,0.05)";
   terrainSegments.forEach((seg) => {
     if (seg.type === "gap") return;
@@ -400,16 +402,14 @@ function drawTerrain() {
 }
 
 // ---------- 障害物 ----------
-function getObstacleHitbox(obs) {
+function fillObstacleHitbox(obs) {
   const marginX = obs.width * 0.18;
   const marginY = obs.height * 0.1;
 
-  return {
-    x: obs.x + marginX,
-    y: obs.y + marginY,
-    width: obs.width - marginX * 2,
-    height: obs.height - marginY * 2
-  };
+  obstacleHitbox.x = obs.x + marginX;
+  obstacleHitbox.y = obs.y + marginY;
+  obstacleHitbox.width = obs.width - marginX * 2;
+  obstacleHitbox.height = obs.height - marginY * 2;
 }
 
 function resetSpawnTimer() {
@@ -566,7 +566,7 @@ function resetCommonState() {
   resizeCanvas();
   initPlayer();
   initBackground();
-  initTerrain(); // ★地形初期化
+  initTerrain();
 
   obstacles = [];
   rescues = [];
@@ -588,6 +588,8 @@ function resetCommonState() {
   resetSpawnTimer();
   resetRescueTimer();
   resetPoopTimer();
+
+  uiUpdateTimer = 0;
 
   bottomLeftEl.textContent = "";
   bottomCenterEl.textContent =
@@ -642,10 +644,14 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-canvas.addEventListener("pointerdown", (e) => {
-  e.preventDefault();
-  handleJump();
-});
+// pointer イベントは passive にしてレイアウトブロックを防ぐ
+canvas.addEventListener(
+  "pointerdown",
+  () => {
+    handleJump();
+  },
+  { passive: true }
+);
 
 // ---------- メインループ ----------
 let lastTime = 0;
@@ -656,10 +662,16 @@ function update(delta) {
   const now = performance.now();
   elapsedTime = (now - startTime) / 1000;
 
+  // UI更新タイマー
+  uiUpdateTimer += delta;
+
   if (currentStage === STAGE_FIRE) {
     const scoreTime = elapsedTime + rescueCount * 10;
-    topLeftStatusEl.textContent = scoreTime.toFixed(2);
     difficulty = 1 + elapsedTime * 0.01;
+
+    if (uiUpdateTimer >= UI_UPDATE_INTERVAL) {
+      topLeftStatusEl.textContent = scoreTime.toFixed(2);
+    }
 
     if (!stage1Cleared && scoreTime >= CLEAR_TIME_STAGE1) {
       stage1Cleared = true;
@@ -667,8 +679,15 @@ function update(delta) {
       stage2Btn.classList.remove("stage-btn-locked");
     }
   } else {
-    topLeftStatusEl.textContent = `回収うんこ：${poopCount}個`;
     difficulty = 1 + elapsedTime * 0.015;
+
+    if (uiUpdateTimer >= UI_UPDATE_INTERVAL) {
+      topLeftStatusEl.textContent = `回収うんこ：${poopCount}個`;
+    }
+  }
+
+  if (uiUpdateTimer >= UI_UPDATE_INTERVAL) {
+    uiUpdateTimer = 0;
   }
 
   // パワーアップ（ステージ1）
@@ -743,10 +762,10 @@ function update(delta) {
       r.x -= r.speed * delta;
     });
 
-    const pHit = getPlayerHitbox();
+    fillPlayerHitbox();
     for (let i = rescues.length - 1; i >= 0; i--) {
       const r = rescues[i];
-      if (rectsOverlap(pHit, r)) {
+      if (rectsOverlap(playerHitbox, r)) {
         rescues.splice(i, 1);
         rescueCount++;
         bottomRightEl.textContent = `救助人数：${rescueCount}人`;
@@ -761,23 +780,24 @@ function update(delta) {
       p.x -= p.speed * delta;
     });
 
-    const pHit = getPlayerHitbox();
+    fillPlayerHitbox();
     for (let i = poopItems.length - 1; i >= 0; i--) {
       const p = poopItems[i];
-      if (rectsOverlap(pHit, p)) {
+      if (rectsOverlap(playerHitbox, p)) {
         poopItems.splice(i, 1);
         poopCount++;
+        // ここはイベント発生時のみなのでそのままDOM更新
         topLeftStatusEl.textContent = `回収うんこ：${poopCount}個`;
       }
     }
   }
 
   // 障害物との押し込み衝突
-  const pHit2 = getPlayerHitbox();
+  fillPlayerHitbox();
   if (!collidedObstacle) {
     for (const obs of obstacles) {
-      const o = getObstacleHitbox(obs);
-      if (rectsOverlap(pHit2, o)) {
+      fillObstacleHitbox(obs);
+      if (rectsOverlap(playerHitbox, obstacleHitbox)) {
         collidedObstacle = obs;
         break;
       }
@@ -888,7 +908,7 @@ function draw() {
   ctx.fillStyle = "rgba(255,255,255,0.7)";
   bgNearBlocks.forEach((b) => ctx.fillRect(b.x, b.y, b.width, b.height));
 
-  // 地形（黒い線＋地面の影）
+  // 地形
   drawTerrain();
 
   // 救助 or うんこ
@@ -913,8 +933,7 @@ function draw() {
   }
 
   // プレイヤー
-  const img =
-    currentStage === STAGE_FIRE ? playerFireImg : playerCleanerImg;
+  const img = currentStage === STAGE_FIRE ? playerFireImg : playerCleanerImg;
   if (isImageReady(img)) {
     ctx.drawImage(img, player.x, player.y, player.width, player.height);
   } else {
@@ -950,10 +969,7 @@ function endGame(isClearStage2) {
     const scoreTime = elapsedTime + rescueCount * 10;
     if (scoreTime > bestStage1Time) {
       bestStage1Time = scoreTime;
-      localStorage.setItem(
-        "runGame_bestStage1Time",
-        String(bestStage1Time)
-      );
+      localStorage.setItem("runGame_bestStage1Time", String(bestStage1Time));
     }
 
     bottomLeftEl.textContent = `今回のタイム：${scoreTime.toFixed(2)} 秒`;
