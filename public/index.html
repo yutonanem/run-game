@@ -2,42 +2,37 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <title>消火とうんこ</title>
+    <title>うんこ集め</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <div class="app-root">
-      <!-- ===== ステージ選択画面 ===== -->
+      <!-- ===== スタート画面（うんこを拾うボタンだけ） ===== -->
       <div id="view-select" class="view view-select active">
         <header class="select-header">
-          <h1 class="app-title">消火とうんこ</h1>
+          <!-- タイトル入れたければここに h1 置いてOK -->
         </header>
 
         <main class="select-main">
-          <!-- STAGE 1 -->
           <section class="stage-card">
-            <h2 class="stage-title">STAGE 1：消防士モード（甘め）</h2>
-            <p class="stage-desc">
-              障害物と炎をよけながら、<br />
-              困っている人を救助しよう。
-            </p>
-            <button id="stage1-btn" class="stage-btn">STAGE 1 をプレイ</button>
-          </section>
+            <!-- でっかいうんこイラスト -->
+            <div class="select-hero">
+              <img
+                src="poop.png"
+                alt="うんこのイラスト"
+                class="select-hero-img"
+              />
+            </div>
 
-          <!-- STAGE 2 -->
-          <section class="stage-card">
-            <h2 class="stage-title">STAGE 2：清掃員モード（激辛）</h2>
-            <p class="stage-desc">
-              うんちを回収しながら街を疾走！<br />
-              集めた数で称号が変わる…！
-            </p>
-            <button id="stage2-btn" class="stage-btn stage-btn-locked">
-              STAGE 2 をプレイ
-            </button>
-            <p class="stage-note">
-              ※ STAGE 1 をクリア（100秒到達）すると解放されます
-            </p>
+            <!-- 説明 & ボタン -->
+            <div class="select-copy">
+              <p class="select-desc">
+                うんこを拾いながら街を爆走<br />
+                集めた数で称号が変わる！
+              </p>
+              <button id="start-btn" class="stage-btn">うんこを拾う</button>
+            </div>
           </section>
         </main>
       </div>
@@ -45,8 +40,9 @@
       <!-- ===== ゲーム画面 ===== -->
       <div id="view-game" class="view view-game">
         <header class="game-header">
-          <button id="back-to-select" class="back-link">← ステージ選択へ戻る</button>
-          <div id="stage-label" class="stage-label">STAGE 1：消防士モード</div>
+          <button id="back-to-select" class="back-link">
+            ← ステージ選択へ戻る
+          </button>
         </header>
 
         <main class="game-main">
@@ -54,16 +50,19 @@
             <div class="canvas-shell">
               <canvas id="gameCanvas"></canvas>
 
-              <!-- 画面中央メッセージ（開始前 / 失敗 / 評価） -->
+              <!-- 画面中央メッセージ -->
               <div id="center-message" class="center-message hidden"></div>
 
-              <!-- 左上ステータス（ステージ1＝タイム、ステージ2＝うんこ数） -->
-              <div id="top-left-status" class="top-left-status"></div>
+              <!-- 左上ステータス（うんこ数） -->
+              <div id="top-left-status" class="top-left-status">
+                回収うんこ：0個
+              </div>
             </div>
 
             <div class="hud-row bottom-info">
               <div id="bottom-left" class="bottom-text"></div>
-              <div id="bottom-center" class="bottom-text"></div>
+              <div id="bottom-center" class="bottom-text">
+              </div>
               <div id="bottom-right" class="bottom-text"></div>
             </div>
 
@@ -73,14 +72,19 @@
           </div>
         </main>
       </div>
-
-      <!-- ===== BGM / SE ===== -->
-      <audio id="bgm-home" src="bgm_home.mp3" preload="auto" loop></audio>
-      <audio id="bgm-game" src="bgm_game.mp3" preload="auto" loop></audio>
-      <audio id="se-jump" src="se_jump.mp3" preload="auto"></audio>
-      <audio id="se-gameover" src="se_gameover.mp3" preload="auto"></audio>
     </div>
 
+    <!-- ===== BGM / SE ===== -->
+    <audio id="bgm-home" src="bgm_home.mp3" preload="auto" loop></audio>
+    <audio id="bgm-game" src="bgm_game.mp3" preload="auto" loop></audio>
+    <audio id="se-jump" src="se_jump.mp3" preload="auto"></audio>
+    <audio
+      id="se-gameover"
+      src="se_gameover.mp3"
+      preload="auto"
+    ></audio>
+
+    <!-- ★ここが超重要：game.js を読み込む -->
     <script src="./game.js"></script>
   </body>
 </html>
