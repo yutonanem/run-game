@@ -1,24 +1,33 @@
-// ====== うんこランゲーム（炎のみ・坂＆穴強化・軽量版） ======
+// ====== うんこランゲーム（炎のみ・坂多め＆落とし穴は必ず落ちるサイズ＋3段で越えられる・軽量版） ======
 "use strict";
 
 window.addEventListener("DOMContentLoaded", () => {
   // ---------- 定数 ----------
   const BASE_JUMP_POWER = -520;
-  const MAX_FIREBALLS = 6; // 障害物 = 炎のみ
-  const MAX_POOP = 12;
-  const DIFFICULTY_MAX = 2.2;
 
-  // ★ 地面スクロールを少し遅く（160 → 140）
+  const MAX_FIREBALLS = 2;
+  const MAX_POOP = 6;
+
   const TERRAIN_BASE_SPEED = 140;
+
+  // 落とし穴確率（時間でアップ / 速度は変えない）
+  const BASE_GAP_PROB = 0.3;      // 最初は30%
+  const MAX_EXTRA_GAP_PROB = 0.3; // 最大 +30% → 60%
+  const GAP_RAMP_SECONDS = 40;
+
+  // ---------- オーディオ設定 ----------
+  const ENABLE_BGM = true;
+  const ENABLE_SE = true;
 
   // ---------- キャンバス ----------
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
+  const CANVAS_SCALE = 0.85;
 
   function resizeCanvas() {
     const r = canvas.getBoundingClientRect();
-    canvas.width = r.width;
-    canvas.height = r.height;
+    canvas.width = r.width * CANVAS_SCALE;
+    canvas.height = r.height * CANVAS_SCALE;
   }
   resizeCanvas();
   window.addEventListener("resize", resizeCanvas);
@@ -49,10 +58,12 @@ window.addEventListener("DOMContentLoaded", () => {
   const seJump = document.getElementById("se-jump");
   const seGameover = document.getElementById("se-gameover");
 
-  function playAudio(a) {
+  function playAudio(a, type) {
     if (!a) return;
+    if (type === "bgm" && !ENABLE_BGM) return;
+    if (type === "se" && !ENABLE_SE) return;
     try {
-      a.currentTime = 0;
+      if (type === "se") a.currentTime = 0;
       const p = a.play();
       if (p?.catch) p.catch(() => {});
     } catch {}
@@ -74,7 +85,6 @@ window.addEventListener("DOMContentLoaded", () => {
   let poopItems = [];
   let terrain = [];
 
-  let difficulty = 1;
   let poopCount = 0;
 
   let gameStarted = false;
@@ -82,6 +92,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
   let startTime = 0;
   let elapsedTime = 0;
+
+  let currentGapProb = BASE_GAP_PROB;
 
   let spawnFireTimer = 0;
   let nextFireInterval = 0;
@@ -118,34 +130,57 @@ window.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  // ---------- 地形（坂＆穴 1.25倍密度） ----------
-  function createTerrainSegment(startX, offset) {
+  // ---------- 地形（坂多め＆穴／穴サイズは3段ジャンプ圏内 ＋ 連続穴禁止） ----------
+  function createTerrainSegment(startX, offset, lastType) {
     const base = player ? player.height : 50;
     const slopeMax = base * 0.6;
 
-    // ★ セグメント幅を 20% 縮めて密度UP
-    const widthFlat = rand(base * 1.0, base * 1.4); // 元: 1.2〜1.8
-    const widthSlope = rand(base * 1.4, base * 1.9); // 元: 1.8〜2.4
-    const widthGap = rand(base * 0.75, base * 1.2);
+    // 坂は短め → 本数が増えて体感2倍
+    const widthFlat = rand(base * 1.0, base * 1.4);
+    const widthSlope = rand(base * 0.7, base * 1.0);
+
+    // ★ 落とし穴の幅：
+    //    最小 = 0.8 * プレイヤー高さ
+    //    最大 = 1.3 * プレイヤー高さ
+    //    → 何もしないと落ちるが、3段ジャンプなら十分越えられる想定
+    const widthGap = rand(base * 0.8, base * 1.3);
 
     let type = "ground";
     let width = widthFlat;
     let startOffset = offset;
     let endOffset = offset;
 
+    // 時間経過に応じて 0.3 → 0.6 まで増える
+    const gapProb = currentGapProb;
+    const flatProb = 0.05;
+    const slopeProb = 1 - flatProb - gapProb;
+    const upProb = slopeProb / 2;
+    const downProb = slopeProb - upProb;
+
     const r = Math.random();
 
-    if (r < 0.46) {
+    if (r < flatProb) {
       width = widthFlat;
-    } else if (r < 0.7) {
+    } else if (r < flatProb + upProb) {
+      // 登り坂
       width = widthSlope;
       endOffset = clamp(offset - rand(base * 0.3, base * 0.6), -slopeMax, 0);
-    } else if (r < 0.9) { // ★ 0.95 → 0.9 にして穴の確率アップ
+    } else if (r < flatProb + upProb + downProb) {
+      // 下り坂
       width = widthSlope;
       endOffset = clamp(offset + rand(base * 0.3, base * 0.6), -slopeMax, 0);
     } else {
+      // 落とし穴
       type = "gap";
       width = widthGap;
+    }
+
+    // ★ 直前も gap だったら今回の gap は禁止（巨大穴防止）
+    if (lastType === "gap" && type === "gap") {
+      type = "ground";
+      width = widthFlat;
+      startOffset = offset;
+      endOffset = offset;
     }
 
     return { x: startX, width, type, startOffset, endOffset };
@@ -155,12 +190,14 @@ window.addEventListener("DOMContentLoaded", () => {
     terrain = [];
     let offset = 0;
     let x = -50;
+    let lastType = "ground";
 
     while (x < canvas.width + 200) {
-      const seg = createTerrainSegment(x, offset);
+      const seg = createTerrainSegment(x, offset, lastType);
       terrain.push(seg);
       x += seg.width;
       if (seg.type !== "gap") offset = seg.endOffset;
+      lastType = seg.type;
     }
   }
 
@@ -180,32 +217,33 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function updateTerrain(delta) {
-    const speed = TERRAIN_BASE_SPEED * difficulty;
+    const speed = TERRAIN_BASE_SPEED;
+
     terrain.forEach((seg) => (seg.x -= speed * delta));
 
-    // 左削除
     while (terrain.length && terrain[0].x + terrain[0].width < -200) {
       terrain.shift();
     }
 
-    // 補充
     let offset = terrain.length ? terrain[terrain.length - 1].endOffset : 0;
     let x =
       terrain.length > 0
         ? terrain[terrain.length - 1].x + terrain[terrain.length - 1].width
         : -50;
+    let lastType = terrain.length ? terrain[terrain.length - 1].type : "ground";
 
     while (x < canvas.width + 200) {
-      const seg = createTerrainSegment(x, offset);
+      const seg = createTerrainSegment(x, offset, lastType);
       terrain.push(seg);
       x += seg.width;
       if (seg.type !== "gap") offset = seg.endOffset;
+      lastType = seg.type;
     }
   }
 
   // ---------- 炎 ----------
   function resetFireTimer() {
-    nextFireInterval = rand(900, 1600);
+    nextFireInterval = rand(2200, 3800);
     spawnFireTimer = 0;
   }
 
@@ -221,13 +259,11 @@ window.addEventListener("DOMContentLoaded", () => {
     const ground = getGroundInfoAtX(spawnX);
     let y = ground.y - height;
 
-    // 上段 or 下段
     if (Math.random() < 0.35) {
       y -= base * 1.2;
     }
 
-    // ★ 炎の移動速度を少し速く（範囲 & 係数UP）
-    const speed = rand(220, 300) * difficulty * 0.9;
+    const speed = rand(220, 300) * 0.9;
 
     fireballs.push({ x: spawnX, y, width, height, speed });
     resetFireTimer();
@@ -235,16 +271,16 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // ---------- うんこ ----------
   function resetPoopTimer() {
-    nextPoopInterval = rand(675, 1200);
+    nextPoopInterval = rand(1500, 2600);
     spawnPoopTimer = 0;
   }
 
   function spawnPoop() {
     if (poopItems.length >= MAX_POOP) return;
 
-    const size = player.height * 0.5;
+    // うんちサイズ2倍
+    const size = player.height * 1.0;
     const spawnX = canvas.width + 20;
-
     const ground = getGroundInfoAtX(spawnX);
 
     poopItems.push({
@@ -252,7 +288,7 @@ window.addEventListener("DOMContentLoaded", () => {
       y: ground.y - size,
       width: size,
       height: size,
-      speed: 200 * difficulty * 0.8 // うんこ速度はそのまま
+      speed: 200 * 0.8
     });
 
     resetPoopTimer();
@@ -285,11 +321,11 @@ window.addEventListener("DOMContentLoaded", () => {
     poopItems = [];
     poopCount = 0;
 
-    difficulty = 1;
     gameStarted = false;
     gameOver = false;
 
     elapsedTime = 0;
+    currentGapProb = BASE_GAP_PROB;
 
     resetFireTimer();
     resetPoopTimer();
@@ -301,7 +337,7 @@ window.addEventListener("DOMContentLoaded", () => {
   function startGame() {
     gameStarted = true;
     startTime = performance.now();
-    playAudio(bgmGame);
+    playAudio(bgmGame, "bgm");
     showMessage("");
   }
 
@@ -315,7 +351,7 @@ window.addEventListener("DOMContentLoaded", () => {
       player.vy = player.jumpPower;
       player.onGround = false;
       player.jumpCount++;
-      playAudio(seJump);
+      playAudio(seJump, "se");
     }
   }
 
@@ -329,11 +365,12 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!gameStarted || gameOver) return;
 
     elapsedTime = (performance.now() - startTime) / 1000;
-    difficulty = Math.min(1 + elapsedTime * 0.012, DIFFICULTY_MAX);
+
+    const rate = Math.min(elapsedTime / GAP_RAMP_SECONDS, 1);
+    currentGapProb = BASE_GAP_PROB + MAX_EXTRA_GAP_PROB * rate;
 
     updateTerrain(delta);
 
-    // プレイヤー物理
     if (player) {
       player.vy += player.gravity * delta;
       player.y += player.vy * delta;
@@ -354,18 +391,18 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // ---- spawn ----
+    // spawn
     spawnFireTimer += delta * 1000;
     if (spawnFireTimer >= nextFireInterval) spawnFireball();
 
     spawnPoopTimer += delta * 1000;
     if (spawnPoopTimer >= nextPoopInterval) spawnPoop();
 
-    // ---- 移動 ----
+    // move
     fireballs.forEach((f) => (f.x -= f.speed * delta));
     poopItems.forEach((p) => (p.x -= p.speed * delta));
 
-    // ---- 当たり判定 ----
+    // collision
     if (player) {
       const hit = getPlayerHitbox();
 
@@ -373,7 +410,7 @@ window.addEventListener("DOMContentLoaded", () => {
         const w = f.width * 0.45;
         const h = f.height * 0.45;
 
-        const fb = {
+      const fb = {
           x: f.x + w / 2,
           y: f.y + h / 2,
           width: f.width - w,
@@ -392,7 +429,6 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // ---- 削除 ----
     fireballs = fireballs.filter((f) => f.x + f.width > -80);
     poopItems = poopItems.filter((p) => p.x + p.width > -80);
   }
@@ -402,7 +438,6 @@ window.addEventListener("DOMContentLoaded", () => {
     ctx.fillStyle = "#8fd4ff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // 地形
     const baseY = getGroundY();
     ctx.strokeStyle = "#666";
     ctx.lineWidth = 2;
@@ -429,21 +464,18 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     ctx.stroke();
 
-    // うんこ
     poopItems.forEach((p) => {
       if (poopImg.complete && poopImg.naturalWidth > 0) {
         ctx.drawImage(poopImg, p.x, p.y, p.width, p.height);
       }
     });
 
-    // 炎
     fireballs.forEach((f) => {
       if (fireballImg.complete && fireballImg.naturalWidth > 0) {
         ctx.drawImage(fireballImg, f.x, f.y, f.width, f.height);
       }
     });
 
-    // プレイヤー
     if (player && playerImg.complete && playerImg.naturalWidth > 0) {
       ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
     }
@@ -471,22 +503,22 @@ window.addEventListener("DOMContentLoaded", () => {
     if (gameOver) return;
     gameOver = true;
 
-    playAudio(seGameover);
+    playAudio(seGameover, "se");
 
     let g = "";
     const c = poopCount;
 
     if (c <= 10) g = "wwww";
-    else if (c <= 20) g = "へたっぴ";
-    else if (c <= 30) g = "まだまだへたっぴ";
-    else if (c <= 40) g = "評価は普通";
-    else if (c <= 50) g = "上手だ";
-    else if (c <= 60) g = "うんこ収集家";
-    else if (c <= 70) g = "やるやん";
-    else if (c <= 80) g = "1人前なうんこ";
-    else if (c <= 90) g = "立派なうんこ";
-    else if (c <= 99) g = "あと一息！";
-    else g = "うんこ大臣";
+    else if (c <= 20) g = "称号「へたっぴ」";
+    else if (c <= 30) g = "称号「まだまだへたっぴ」";
+    else if (c <= 40) g = "称号「評価は普通」";
+    else if (c <= 50) g = "称号「上手だ」";
+    else if (c <= 60) g = "称号「うんこ収集家」";
+    else if (c <= 70) g = "称号「やるやん」";
+    else if (c <= 80) g = "称号「1人前なうんこ」";
+    else if (c <= 90) g = "称号「立派なうんこ」";
+    else if (c <= 99) g = "称号「あと一息」！";
+    else g = "称号「うんこ大臣」";
 
     showMessage(g, "grade");
   }
