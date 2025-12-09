@@ -8,7 +8,6 @@ window.addEventListener("DOMContentLoaded", () => {
   const MAX_OBSTACLES = 6;
   const MAX_POOP = 12;
   const DIFFICULTY_MAX = 2.2;
-
   const TERRAIN_BASE_SPEED = 200; // 地面のスクロール速度
 
   // ---------- キャンバス ----------
@@ -31,7 +30,6 @@ window.addEventListener("DOMContentLoaded", () => {
   // ---------- UI要素 ----------
   const viewSelect = document.getElementById("view-select");
   const viewGame = document.getElementById("view-game");
-  const stageLabelEl = document.getElementById("stage-label"); // いまは HTML にないかもしれないので null の可能性あり
   const restartBtn = document.getElementById("restart-btn");
   const centerMessageEl = document.getElementById("center-message");
   const topLeftStatusEl = document.getElementById("top-left-status");
@@ -56,7 +54,7 @@ window.addEventListener("DOMContentLoaded", () => {
   // ---------- BGM / SE ----------
   const bgmGame = document.getElementById("bgm-game");
   const seJump = document.getElementById("se-jump");
-  const seGameover = document.getElementById("se-gameover"); // なければ null でも OK
+  const seGameover = document.getElementById("se-gameover");
 
   function playAudio(a) {
     if (!a) return;
@@ -87,7 +85,6 @@ window.addEventListener("DOMContentLoaded", () => {
   let player;
   let obstacles = [];
   let poopItems = [];
-
   let terrainSegments = []; // 地面セグメント
 
   let difficulty = 1;
@@ -140,7 +137,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const slopeMax = baseSize * 0.6;
 
     const minOffset = -slopeMax; // 少し上に上がる
-    const maxOffset = 0; // これより下には行かない（常に基準より上か同じ）
+    const maxOffset = 0; // これより下には行かない
 
     let type = "ground";
     let width;
@@ -148,7 +145,6 @@ window.addEventListener("DOMContentLoaded", () => {
     let endOffset = currentOffset;
 
     const r = Math.random();
-    // ★坂＆穴の出現率を少し増やした版
     if (r < 0.46) {
       // フラット
       width = rand(baseSize * 1.2, baseSize * 1.8);
@@ -233,11 +229,10 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // 地面の影をなくして軽量化した描画
   function drawTerrain() {
     const baseY = getGroundY();
-    const bottom = canvas.height;
 
-    // 黒い線（地面のライン）
     ctx.strokeStyle = "#666";
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -262,23 +257,6 @@ window.addEventListener("DOMContentLoaded", () => {
       ctx.lineTo(x2, y2);
     });
     ctx.stroke();
-
-    // 地面の影
-    ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
-    terrainSegments.forEach((seg) => {
-      if (seg.type === "gap") return;
-      const x1 = seg.x;
-      const x2 = seg.x + seg.width;
-      const y1 = baseY + seg.startOffset;
-      const y2 = baseY + seg.endOffset;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.lineTo(x2, bottom);
-      ctx.lineTo(x1, bottom);
-      ctx.closePath();
-      ctx.fill();
-    });
   }
 
   // ---------- 障害物（ブロック＋炎） ----------
@@ -331,7 +309,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // ---------- うんこ ----------
   function resetPoopTimer() {
-    // ★出現頻度を 2/3 程度に
+    // 出現頻度はやや控えめ
     nextPoopInterval = rand(675, 1200);
     spawnPoopTimer = 0;
   }
@@ -444,8 +422,6 @@ window.addEventListener("DOMContentLoaded", () => {
   );
 
   // ---------- 更新 ----------
-  let lastTime = 0;
-
   function update(delta) {
     if (!gameStarted || gameOver) return;
 
@@ -502,12 +478,12 @@ window.addEventListener("DOMContentLoaded", () => {
     const hit = getPlayerHitbox();
 
     for (const o of obstacles) {
-      let obb = o; // デフォルトはそのまま
+      let obb = o;
 
-      // 🔥 炎のときだけ当たり判定を小さくする
+      // 炎のときだけ当たり判定を小さくする
       if (o.type === "fireball") {
-        const shrinkW = o.width * 0.45; // 横幅を45%くらい縮める
-        const shrinkH = o.height * 0.45; // 高さも縮める
+        const shrinkW = o.width * 0.45;
+        const shrinkH = o.height * 0.45;
 
         obb = {
           x: o.x + shrinkW / 2,
@@ -554,24 +530,14 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    // 障害物
+    // 障害物（炎の回転はやめて軽量化）
     obstacles.forEach((o) => {
       if (
         o.type === "fireball" &&
         fireballImg.complete &&
         fireballImg.naturalWidth > 0
       ) {
-        ctx.save();
-        ctx.translate(o.x + o.width / 2, o.y + o.height / 2);
-        ctx.rotate((-15 * Math.PI) / 180);
-        ctx.drawImage(
-          fireballImg,
-          -o.width / 2,
-          -o.height / 2,
-          o.width,
-          o.height
-        );
-        ctx.restore();
+        ctx.drawImage(fireballImg, o.x, o.y, o.width, o.height);
       } else if (obstacleImg.complete && obstacleImg.naturalWidth > 0) {
         ctx.drawImage(obstacleImg, o.x, o.y, o.width, o.height);
       } else {
@@ -591,13 +557,23 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ---------- ループ ----------
-  function loop(timestamp) {
-    const delta = (timestamp - lastTime) / 1000 || 0;
-    lastTime = timestamp;
+  // ---------- ループ（30fpsに制限しつつスピード維持） ----------
+  let lastFrameTime = 0;
+  const FRAME_INTERVAL = 1000 / 30; // 30fps
 
-    update(delta);
-    draw();
+  function loop(timestamp) {
+    if (!lastFrameTime) {
+      lastFrameTime = timestamp;
+    }
+
+    const elapsed = timestamp - lastFrameTime;
+
+    if (elapsed >= FRAME_INTERVAL) {
+      const delta = Math.min(elapsed / 1000, 0.05); // 最大0.05秒分まで
+      update(delta);
+      draw();
+      lastFrameTime = timestamp;
+    }
 
     requestAnimationFrame(loop);
   }
@@ -610,7 +586,6 @@ window.addEventListener("DOMContentLoaded", () => {
 
     playAudio(seGameover);
 
-    // 評価メッセージ
     const count = poopCount;
     let grade = "";
 
@@ -626,10 +601,8 @@ window.addEventListener("DOMContentLoaded", () => {
     else if (count <= 99) grade = "あと一息！";
     else grade = "うんこ大臣";
 
-    // 表示
     showMessage(grade, "grade");
 
-    // 下部の表示
     bottomCenterEl.textContent = "";
     bottomRightEl.textContent = `回収うんこ：${poopCount}個`;
   }
@@ -643,8 +616,6 @@ window.addEventListener("DOMContentLoaded", () => {
   function showGame() {
     viewSelect.classList.remove("active");
     viewGame.classList.add("active");
-    // ★ステージラベルは非表示にしたいので textContent を触らない
-    // if (stageLabelEl) stageLabelEl.textContent = "";
     resetGame();
   }
 

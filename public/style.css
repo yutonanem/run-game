@@ -9,34 +9,14 @@ body {
   height: 100%;
 }
 
-/* ② 外側の薄いピンクをやめて、画面全体を柄に（ちょいテトリス風） */
+/* PC / スマホ共通：軽い背景 */
 body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
 
-  /* ベースカラー */
   background-color: #ffd9e6;
-
-  /* テトリスっぽいブロック柄 */
-  background-image:
-    /* 細かいグリッド */
-    linear-gradient(#ffeef5 1px, transparent 1px),
-    linear-gradient(90deg, #ffeef5 1px, transparent 1px),
-    /* 大きめブロック */
-    linear-gradient(#b3e5fc 2px, transparent 2px),
-    linear-gradient(90deg, #ffb6c1 2px, transparent 2px);
-
-  background-size:
-    16px 16px,
-    16px 16px,
-    64px 64px,
-    64px 64px;
-
-  background-position:
-    0 0,
-    0 0,
-    0 0,
-    32px 32px;
+  /* 単純な縦グラデーションのみ（かなり軽い） */
+  background-image: linear-gradient(#ffeef5, #ffd9e6);
 }
 
 /* ルート */
@@ -65,19 +45,12 @@ body {
 
 /* ===== スタート画面 ===== */
 
-/* view-select 自体には柄をつけず、背景の柄をそのまま使う */
 .view-select {
   background: #ffffff;
 }
 
 .select-header {
   padding: 20px 28px 8px;
-}
-
-.app-title {
-  margin: 0;
-  font-size: 32px;
-  letter-spacing: 0.08em;
 }
 
 .select-main {
@@ -95,16 +68,15 @@ body {
   text-align: center;
 }
 
-/* ① でっかいうんこイラスト */
+/* でっかいうんこイラスト */
 .select-hero {
   margin-top: 8px;
-  margin-bottom: 32px; /* この分だけ説明＋ボタンが下にさがる */
+  margin-bottom: 32px;
 }
 
 .select-hero-img {
   display: block;
   margin: 0 auto;
-  /* 画面幅に応じてサイズ可変。かなり大きめに */
   max-width: 260px;
   width: 28vw;
   height: auto;
@@ -122,7 +94,7 @@ body {
   line-height: 1.6;
 }
 
-/* ボタン（そのまま流用） */
+/* ボタン */
 .stage-btn {
   display: block;
   width: 100%;
@@ -146,22 +118,9 @@ body {
 
 /* ===== ゲーム画面 ===== */
 
+/* 柄をやめて、シンプルな縦グラデーションに */
 .view-game {
-  background: repeating-linear-gradient(
-      -45deg,
-      #ffb6c1,
-      #ffb6c1 18px,
-      transparent 18px,
-      transparent 36px
-    ),
-    repeating-linear-gradient(
-      45deg,
-      #d1c4e9,
-      #d1c4e9 18px,
-      transparent 18px,
-      transparent 36px
-    );
-  background-size: 36px 36px;
+  background: linear-gradient(#ffd9e6, #ffc1e3);
 }
 
 .game-header {
@@ -299,7 +258,7 @@ body {
   letter-spacing: 0.08em;
 }
 
-/* スマホ向け調整 */
+/* ===== スマホ向けレイアウト調整（見た目だけ） ===== */
 @media (max-width: 768px) {
   .app-root {
     padding: 0;
@@ -311,6 +270,7 @@ body {
 
   .game-frame {
     border-radius: 0;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
   }
 
   #gameCanvas {
@@ -323,6 +283,7 @@ body {
 
   .stage-card {
     padding: 24px 18px 30px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
   }
 
   .select-desc {
