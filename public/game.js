@@ -1,4 +1,4 @@
-// ====== Poop Runner (with settings, avatars, transition & global ranking + shared avatars) ======
+// ====== Poop Runner (settings: name + country, global ranking) ======
 "use strict";
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -19,14 +19,16 @@ window.addEventListener("DOMContentLoaded", () => {
   const ENABLE_BGM = true;
   const ENABLE_SE = true;
 
+  // 音量設定
   const VOLUME = {
     // BGM
-    bgmHome: 0.4,
-    bgmGame: 0.4,
-    bgmResult: 0.4,
+    bgmHome: 0.4,   // タイトル
+    bgmGame: 0.4,   // プレイ中
+    bgmResult: 0.4, // 結果画面
+
     // SE
     seJump: 0.7,
-    seGameover: 0.8,
+    seGameover: 0.8
   };
 
   const CANVAS_SCALE = 0.85;
@@ -43,12 +45,11 @@ window.addEventListener("DOMContentLoaded", () => {
   const BEST_RUNS_KEY = "poopRunnerBestRuns";
   const BEST_RUNS_LIMIT = 10;
 
-  const PROFILE_KEY = "poopRunnerProfile";
+  const PROFILE_KEY = "poopRunnerProfileV2"; // V2: name + country だけ
 
   // サーバー API エンドポイント
   const POOP_API_SCORE = "/api/poop-score";
   const POOP_API_RANKING = "/api/poop-ranking";
-  const PROFILE_API = "/api/profile";
 
   // ---------- canvas ----------
   const canvas = document.getElementById("gameCanvas");
@@ -93,16 +94,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const settingsSaveBtn = document.getElementById("settings-save");
   const settingsCancelBtn = document.getElementById("settings-cancel");
   const settingNameInput = document.getElementById("setting-name");
-
-  const avatarPreview = document.getElementById("avatar-preview");
-  const avatarFileBtn = document.getElementById("avatar-file-btn");
-  const avatarFileInput = document.getElementById("avatar-file-input");
-  const avatarCameraBtn = document.getElementById("avatar-camera-btn");
-
-  const cameraArea = document.getElementById("camera-area");
-  const cameraVideo = document.getElementById("avatar-camera-video");
-  const cameraCaptureBtn = document.getElementById("avatar-camera-capture");
-  const cameraCancelBtn = document.getElementById("avatar-camera-cancel");
+  const settingCountrySelect = document.getElementById("setting-country");
 
   const transitionOverlay = document.getElementById("transition-overlay");
 
@@ -123,7 +115,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const seJump = document.getElementById("se-jump");
   const seGameover = document.getElementById("se-gameover");
 
-  // 初期ボリューム設定
+  // 初期ボリューム
   if (bgmHome) bgmHome.volume = VOLUME.bgmHome;
   if (bgmGame) bgmGame.volume = VOLUME.bgmGame;
   if (bgmResult) bgmResult.volume = VOLUME.bgmResult;
@@ -196,6 +188,19 @@ window.addEventListener("DOMContentLoaded", () => {
     } catch {}
   }
 
+  // プロフィールから「表示名」を作る: "name#country"
+  function getDisplayNameFromProfile(p) {
+    const name =
+      typeof p?.name === "string" && p.name.trim()
+        ? p.name.trim()
+        : "Player";
+    const country =
+      typeof p?.country === "string" && p.country.trim()
+        ? p.country.trim()
+        : "";
+    return country ? `${name}#${country}` : name;
+  }
+
   // HTML エスケープ（ユーザー名表示用）
   function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, (ch) => {
@@ -216,21 +221,19 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ====== サーバー通信 ======
+  // ====== サーバー通信（世界ランキング） ======
 
-  async function sendScoreToServer(run, playerName) {
+  async function sendScoreToServer(run, displayName) {
     try {
-      const payload = {
-        score: run.score,
-        rank: run.rank,
-        label: run.label,
-        name: playerName,
-      };
-
       await fetch(POOP_API_SCORE, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          score: run.score,
+          rank: run.rank,
+          label: run.label,
+          name: displayName // "yuto#Japan"
+        })
       });
     } catch (err) {
       console.error("Failed to send score:", err);
@@ -246,35 +249,6 @@ window.addEventListener("DOMContentLoaded", () => {
     } catch (err) {
       console.error("Failed to fetch leaderboard:", err);
       return loadBestRuns().slice(0, BEST_RUNS_LIMIT);
-    }
-  }
-
-  // プロフィール（名前＋アバター）をサーバーに送信
-  async function syncProfileToServer() {
-    const name =
-      typeof profile?.name === "string" ? profile.name.trim() : "";
-    if (!name) return;
-
-    try {
-      const payload = {
-        name,
-        avatarDataUrl: profile.avatarDataUrl || null,
-      };
-
-      const res = await fetch(PROFILE_API, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        console.error("Profile sync failed:", res.status);
-        if (res.status === 413) {
-          alert("Avatar image is too large. Please choose a smaller one.");
-        }
-      }
-    } catch (err) {
-      console.error("Failed to sync profile:", err);
     }
   }
 
@@ -306,8 +280,7 @@ window.addEventListener("DOMContentLoaded", () => {
   let speedLines = [];
   let particles = [];
 
-  let cameraStream = null;
-  let profile = loadProfile() || { name: "Player", avatarDataUrl: null };
+  let profile = loadProfile() || { name: "Player", country: "" };
 
   // ---------- player ----------
   function initPlayer() {
@@ -323,7 +296,7 @@ window.addEventListener("DOMContentLoaded", () => {
       jumpPower: BASE_JUMP_POWER,
       maxJumps: 3,
       jumpCount: 0,
-      onGround: true,
+      onGround: true
     };
   }
 
@@ -334,7 +307,7 @@ window.addEventListener("DOMContentLoaded", () => {
       x: player.x + (player.width - w) / 2,
       y: player.y + (player.height - h) / 2,
       width: w,
-      height: h,
+      height: h
     };
   }
 
@@ -475,7 +448,7 @@ window.addEventListener("DOMContentLoaded", () => {
       height,
       speed,
       phase: Math.random() * Math.PI * 2,
-      amplitude,
+      amplitude
     });
     resetFireTimer();
   }
@@ -500,7 +473,7 @@ window.addEventListener("DOMContentLoaded", () => {
       width: size,
       height: size,
       speed: 200 * 0.8,
-      isBonus: ground.bonus,
+      isBonus: ground.bonus
     });
 
     resetPoopTimer();
@@ -515,7 +488,7 @@ window.addEventListener("DOMContentLoaded", () => {
         x: rand(0, canvas.width),
         y: rand(0, canvas.height),
         length: len,
-        speed: rand(300, 600),
+        speed: rand(300, 600)
       });
     }
   }
@@ -567,7 +540,7 @@ window.addEventListener("DOMContentLoaded", () => {
         vy: vyBase,
         life: 0,
         maxLife: rand(0.25, 0.45),
-        size: rand(2, 4),
+        size: rand(2, 4)
       });
     }
   }
@@ -665,49 +638,27 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     const nameFallback = "Anonymous";
-    const currentName = profile?.name || nameFallback;
+    const myDisplayName = getDisplayNameFromProfile(profile);
 
     resultBestListEl.innerHTML = topRuns
       .map((r, i) => {
-        const rawName = r.name || nameFallback;
+        const rawName = r.name || nameFallback; // ここに "yuto#Japan" が入ってる
         const displayName = escapeHtml(rawName);
         const displayScore = r.score ?? 0;
         const displayRank = r.rank || "?";
 
-        const isSelf = rawName === currentName;
-
-        const serverAvatar = r.avatarDataUrl;
-        const localAvatar = profile.avatarDataUrl;
-
-        let avatarHtml = '<div class="best-avatar"></div>';
-
-        if (serverAvatar) {
-          // サーバーから来たアバター（全員分）
-          avatarHtml = `
-            <div class="best-avatar has-image">
-              <img class="best-avatar-img" src="${serverAvatar}" alt="avatar" />
-            </div>
-          `;
-        } else if (isSelf && localAvatar) {
-          // サーバーにまだない場合の保険として、自分だけローカル表示
-          avatarHtml = `
-            <div class="best-avatar has-image">
-              <img class="best-avatar-img" src="${localAvatar}" alt="avatar" />
-            </div>
-          `;
-        }
+        const isSelf = rawName === myDisplayName;
 
         return `
-          <li class="best-item">
-            <span class="best-rank-badge">#${i + 1}</span>
-            ${avatarHtml}
-            <div class="best-name">${displayName}</div>
-            <div class="best-score-wrap">
-              <span class="best-score">${displayScore}</span>
-              <span class="best-rank-text">${displayRank}</span>
-            </div>
-          </li>
-        `;
+        <li class="best-item${isSelf ? " best-item-self" : ""}">
+          <span class="best-rank-badge">#${i + 1}</span>
+          <div class="best-name">${displayName}</div>
+          <div class="best-score-wrap">
+            <span class="best-score">${displayScore}</span>
+            <span class="best-rank-text">${displayRank}</span>
+          </div>
+        </li>
+      `;
       })
       .join("");
   }
@@ -727,7 +678,7 @@ window.addEventListener("DOMContentLoaded", () => {
       "#ffd740",
       "#69f0ae",
       "#40c4ff",
-      "#e040fb",
+      "#e040fb"
     ];
     for (let i = 0; i < count; i++) {
       const div = document.createElement("div");
@@ -877,7 +828,7 @@ window.addEventListener("DOMContentLoaded", () => {
           x: f.x + w / 2,
           y: f.y + h / 2,
           width: f.width - w,
-          height: f.height - h,
+          height: f.height - h
         };
 
         if (rectOverlap(hit, fb)) return endGame();
@@ -1035,19 +986,16 @@ window.addEventListener("DOMContentLoaded", () => {
     const c = poopCount;
     const { rank, label } = evaluateRank(c);
 
-    const playerName =
-      typeof profile?.name === "string" && profile.name.trim()
-        ? profile.name.trim()
-        : "Anonymous";
+    const playerDisplayName = getDisplayNameFromProfile(profile);
 
     const bestRuns = loadBestRuns();
-    const newRun = { score: c, rank, label, name: playerName };
+    const newRun = { score: c, rank, label, name: playerDisplayName };
     bestRuns.push(newRun);
     bestRuns.sort((a, b) => b.score - a.score);
     const localTop = bestRuns.slice(0, BEST_RUNS_LIMIT);
     saveBestRuns(localTop);
 
-    await sendScoreToServer(newRun, playerName);
+    await sendScoreToServer(newRun, playerDisplayName);
     const topRuns = await fetchLeaderboardFromServer();
 
     updateResultView(rank, label, c, topRuns);
@@ -1069,105 +1017,15 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ---------- Settings / Avatar ----------
+  // ---------- Settings ----------
   function openSettings() {
     settingNameInput.value = profile.name || "";
-    renderAvatarPreview();
+    settingCountrySelect.value = profile.country || "";
     settingsModal.classList.remove("hidden");
   }
 
   function closeSettings() {
     settingsModal.classList.add("hidden");
-    stopCamera();
-  }
-
-  function renderAvatarPreview() {
-    avatarPreview.classList.remove("has-image");
-    avatarPreview.innerHTML = "";
-    if (profile.avatarDataUrl) {
-      const img = document.createElement("img");
-      img.src = profile.avatarDataUrl;
-      img.alt = "avatar";
-      avatarPreview.classList.add("has-image");
-      avatarPreview.appendChild(img);
-    }
-  }
-
-  function startCamera() {
-    if (!navigator.mediaDevices?.getUserMedia) return;
-    navigator.mediaDevices
-      .getUserMedia({ video: true })
-      .then((stream) => {
-        cameraStream = stream;
-        cameraVideo.srcObject = stream;
-        cameraArea.classList.remove("hidden");
-      })
-      .catch((err) => {
-        console.error("camera error", err);
-      });
-  }
-
-  function stopCamera() {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach((t) => t.stop());
-      cameraStream = null;
-    }
-    cameraArea.classList.add("hidden");
-    cameraVideo.srcObject = null;
-  }
-
-  function captureFromCamera() {
-    if (!cameraStream) return;
-    const video = cameraVideo;
-    const w = video.videoWidth;
-    const h = video.videoHeight;
-    if (!w || !h) return;
-
-    const size = 256;
-    const canvasCap = document.createElement("canvas");
-    canvasCap.width = size;
-    canvasCap.height = size;
-    const ctxCap = canvasCap.getContext("2d");
-
-    const minSide = Math.min(w, h);
-    const sx = (w - minSide) / 2;
-    const sy = (h - minSide) / 2;
-
-    ctxCap.drawImage(video, sx, sy, minSide, minSide, 0, 0, size, size);
-
-    const dataUrl = canvasCap.toDataURL("image/png");
-    profile.avatarDataUrl = dataUrl;
-    renderAvatarPreview();
-    stopCamera();
-  }
-
-  // ファイルから選んだ画像も 256x256 にリサイズして保存
-  function handleAvatarFile(file) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const size = 256;
-        const canvasCap = document.createElement("canvas");
-        canvasCap.width = size;
-        canvasCap.height = size;
-        const ctxCap = canvasCap.getContext("2d");
-
-        const w = img.width;
-        const h = img.height;
-        const minSide = Math.min(w, h);
-        const sx = (w - minSide) / 2;
-        const sy = (h - minSide) / 2;
-
-        ctxCap.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
-
-        const dataUrl = canvasCap.toDataURL("image/png");
-        profile.avatarDataUrl = dataUrl;
-        renderAvatarPreview();
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
   }
 
   // ---------- view switch ----------
@@ -1203,36 +1061,18 @@ window.addEventListener("DOMContentLoaded", () => {
   settingsBtn.addEventListener("click", openSettings);
   settingsCancelBtn.addEventListener("click", closeSettings);
 
-  settingsSaveBtn.addEventListener("click", async () => {
+  settingsSaveBtn.addEventListener("click", () => {
     const name = settingNameInput.value.trim();
-    profile.name = name || "Player";
+    const country = settingCountrySelect.value.trim();
+    profile = {
+      name: name || "Player",
+      country: country || ""
+    };
     saveProfile(profile);
-
-    // プロフィールをサーバーにも反映
-    await syncProfileToServer();
-
     closeSettings();
   });
 
-  avatarFileBtn.addEventListener("click", () => {
-    avatarFileInput.click();
-  });
-
-  avatarFileInput.addEventListener("change", () => {
-    const file = avatarFileInput.files?.[0];
-    if (!file) return;
-    handleAvatarFile(file);
-  });
-
-  avatarCameraBtn.addEventListener("click", () => {
-    startCamera();
-  });
-
-  cameraCaptureBtn.addEventListener("click", captureFromCamera);
-  cameraCancelBtn.addEventListener("click", stopCamera);
-
   // ---------- initial ----------
-  renderAvatarPreview();
   showOnlyView(viewSelect);
   playAudio(bgmHome, "bgm");
 });

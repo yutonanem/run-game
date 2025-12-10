@@ -101,7 +101,8 @@
       <div class="modal-content">
         <h2 class="modal-title">Player Settings</h2>
 
-        <label class="modal-field">
+        <!-- 名前 -->
+        <div class="modal-field">
           <span class="modal-label">Player name</span>
           <input
             id="setting-name"
@@ -109,58 +110,28 @@
             maxlength="20"
             placeholder="Your name"
           />
-        </label>
-
-        <div class="modal-field">
-          <span class="modal-label">Avatar</span>
-          <div class="avatar-row">
-            <div class="avatar-preview-wrap">
-              <!-- 設定されていないときは CSS のデフォルト影アイコン -->
-              <div id="avatar-preview" class="avatar-preview"></div>
-            </div>
-
-            <div class="avatar-buttons">
-              <button id="avatar-file-btn" type="button" class="small-btn">
-                Choose Image
-              </button>
-              <input
-                id="avatar-file-input"
-                type="file"
-                accept="image/*"
-                class="hidden"
-              />
-
-              <button id="avatar-camera-btn" type="button" class="small-btn">
-                Take Photo
-              </button>
-            </div>
-          </div>
-
-          <div class="camera-area hidden" id="camera-area">
-            <video
-              id="avatar-camera-video"
-              autoplay
-              playsinline
-              class="camera-video"
-            ></video>
-            <div class="camera-buttons">
-              <button
-                id="avatar-camera-capture"
-                type="button"
-                class="small-btn primary-small"
-              >
-                Capture
-              </button>
-              <button
-                id="avatar-camera-cancel"
-                type="button"
-                class="small-btn"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
         </div>
+
+        <!-- 国 -->
+        <div class="modal-field">
+          <span class="modal-label">Country</span>
+          <select id="setting-country">
+            <option value="">Select your country</option>
+            <option value="Japan">Japan</option>
+            <option value="USA">USA</option>
+            <option value="UK">UK</option>
+            <option value="Korea">Korea</option>
+            <option value="China">China</option>
+            <option value="Germany">Germany</option>
+            <option value="France">France</option>
+            <option value="Brazil">Brazil</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <p class="modal-hint">
+          Ranking will show like <code>yuto#Japan</code>.
+        </p>
 
         <div class="modal-actions">
           <button id="settings-save" type="button" class="primary-btn small">
@@ -174,7 +145,6 @@
     </div>
 
     <!-- ===== BGM / SE ===== -->
-    <!-- 3ページそれぞれ別のBGMファイルを用意してね -->
     <audio id="bgm-home" src="bgm_home.mp3" preload="auto" loop></audio>
     <audio id="bgm-game" src="bgm_game.mp3" preload="auto" loop></audio>
     <audio id="bgm-result" src="bgm_result.mp3" preload="auto" loop></audio>

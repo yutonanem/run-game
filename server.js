@@ -6,14 +6,15 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// JSON を受け取る設定（少し大きめにしておく）
+// JSON を受け取る設定（1MB までに制限）
 app.use(express.json({ limit: "1mb" }));
 
 // public 配下の静的ファイルを配信
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static("public"));
 
 /* =====================================================
  *  もともとのランキングAPI（time ベース）
+ *  ※既存の実装はそのまま温存
  * ===================================================*/
 
 let ranking = []; // { name: string, time: number } の配列
@@ -62,58 +63,25 @@ app.post("/api/score", (req, res) => {
 });
 
 /* =====================================================
- *  Poop Runner 用：プロフィール（アバター）API
- * ===================================================*/
-
-// { [name: string]: { avatarDataUrl: string | null } }
-const poopProfiles = Object.create(null);
-
-// プロフィール保存
-app.post("/api/profile", (req, res) => {
-  const { name, avatarDataUrl } = req.body || {};
-
-  if (typeof name !== "string" || !name.trim()) {
-    return res.status(400).json({ error: "name is required" });
-  }
-
-  const trimmedName = name.trim();
-
-  let storedAvatar = null;
-
-  if (typeof avatarDataUrl === "string" && avatarDataUrl) {
-    // 画像っぽい dataURL だけ許可
-    if (!avatarDataUrl.startsWith("data:image/")) {
-      return res.status(400).json({ error: "avatar must be image data URL" });
-    }
-
-    // サイズ制限（長すぎる場合は 413）
-    const MAX_LEN = 200000; // ざっくり 200KB まで
-    if (avatarDataUrl.length > MAX_LEN) {
-      return res.status(413).json({ error: "avatar too large" });
-    }
-
-    storedAvatar = avatarDataUrl;
-  }
-
-  poopProfiles[trimmedName] = { avatarDataUrl: storedAvatar };
-
-  res.json({ ok: true });
-});
-
-/* =====================================================
  *  Poop Runner 用 世界ランキングAPI
+ *  （サーバーのメモリ上に保持・スコアが大きいほど上位）
+ *
+ *  name には「ユーザーネーム#国」をそのまま入れる想定
+ *  例: "yuto#Japan"
  * ===================================================*/
 
-// { score, rank, label, name, avatarDataUrl, createdAt } の配列
+// { score: number, rank: string, label: string, name: string, createdAt: number } の配列
 let poopRanking = [];
 
-// ランキング取得
+// Poop Runner のランキング取得
 app.get("/api/poop-ranking", (req, res) => {
   const limitRaw = req.query.limit;
-  const limit = Number.isFinite(Number(limitRaw)) ? Number(limitRaw) : 10;
+  const limit = Number.isFinite(Number(limitRaw))
+    ? Number(limitRaw)
+    : 10;
 
   const top = poopRanking
-    .slice()
+    .slice() // 念のためコピー
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score; // スコア高い順
       return a.createdAt - b.createdAt; // 同点なら古い順
@@ -123,7 +91,7 @@ app.get("/api/poop-ranking", (req, res) => {
   res.json(top);
 });
 
-// スコア送信
+// Poop Runner のスコア送信
 app.post("/api/poop-score", (req, res) => {
   const { score, rank, label, name } = req.body || {};
 
@@ -135,17 +103,12 @@ app.post("/api/poop-score", (req, res) => {
   const playerName =
     typeof name === "string" && name.trim() ? name.trim() : "Anonymous";
 
-  // もしプロフィールがあれば紐づけ
-  const profile = poopProfiles[playerName] || null;
-  const avatarDataUrl = profile ? profile.avatarDataUrl || null : null;
-
   const entry = {
     score,
     rank: typeof rank === "string" ? rank : "F",
     label: typeof label === "string" ? label : "",
-    name: playerName,
-    avatarDataUrl,
-    createdAt: Date.now(),
+    name: playerName,           // ← "yuto#Japan" などが入る
+    createdAt: Date.now()
   };
 
   poopRanking.push(entry);
