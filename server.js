@@ -67,7 +67,7 @@ app.post("/api/score", (req, res) => {
  *  （サーバーのメモリ上に保持・スコアが大きいほど上位）
  * ===================================================*/
 
-// { score: number, rank: string, label: string, createdAt: number } の配列
+// { score: number, rank: string, label: string, name: string, createdAt: number } の配列
 let poopRanking = [];
 
 // Poop Runner のランキング取得
@@ -90,19 +90,21 @@ app.get("/api/poop-ranking", (req, res) => {
 
 // Poop Runner のスコア送信
 app.post("/api/poop-score", (req, res) => {
-  const { score, rank, label } = req.body || {};
+  const { score, rank, label, name } = req.body || {};
 
-  if (
-    typeof score !== "number" ||
-    !Number.isFinite(score)
-  ) {
+  if (typeof score !== "number" || !Number.isFinite(score)) {
     return res.status(400).json({ error: "score must be number" });
   }
+
+  // 名前は任意。未入力なら Anonymous にする
+  const playerName =
+    typeof name === "string" && name.trim() ? name.trim() : "Anonymous";
 
   const entry = {
     score,
     rank: typeof rank === "string" ? rank : "F",
     label: typeof label === "string" ? label : "",
+    name: playerName,
     createdAt: Date.now()
   };
 
@@ -119,6 +121,7 @@ app.post("/api/poop-score", (req, res) => {
   const top = poopRanking.slice(0, 10);
   res.json(top);
 });
+
 
 /* =====================================================
  *  それ以外のリクエストは index.html を返す
