@@ -1,8 +1,8 @@
-// ====== うんこランゲーム（炎のみ・坂多め＆落とし穴は必ず落ちるサイズ＋3段で越えられる・軽量版） ======
+// ====== Poop Runner (with separate result screen + global ranking) ======
 "use strict";
 
 window.addEventListener("DOMContentLoaded", () => {
-  // ---------- 定数 ----------
+  // ---------- constants ----------
   const BASE_JUMP_POWER = -520;
 
   const MAX_FIREBALLS = 2;
@@ -10,19 +10,36 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const TERRAIN_BASE_SPEED = 140;
 
-  // 落とし穴確率（時間でアップ / 速度は変えない）
-  const BASE_GAP_PROB = 0.3;      // 最初は30%
-  const MAX_EXTRA_GAP_PROB = 0.3; // 最大 +30% → 60%
+  const BASE_GAP_PROB = 0.3;
+  const MAX_EXTRA_GAP_PROB = 0.3;
   const GAP_RAMP_SECONDS = 40;
 
-  // ---------- オーディオ設定 ----------
+  const BONUS_SEGMENT_PROB = 0.15;
+
   const ENABLE_BGM = true;
   const ENABLE_SE = true;
 
-  // ---------- キャンバス ----------
+  const CANVAS_SCALE = 0.85;
+
+  const BG_FAR_SPEED = TERRAIN_BASE_SPEED * 0.15;
+  const BG_NEAR_SPEED = TERRAIN_BASE_SPEED * 0.4;
+
+  const SPEED_LINE_COUNT = 8;
+  const MAX_PARTICLES = 40;
+
+  const FIRE_SWAY_SPEED = 4.0;
+  const FIRE_SWAY_AMPLITUDE_RATIO = 0.15;
+
+  const BEST_RUNS_KEY = "poopRunnerBestRuns";
+  const BEST_RUNS_LIMIT = 5;
+
+  // サーバー API エンドポイント（同じ Node サーバー上で動かす想定）
+  const POOP_API_SCORE = "/api/poop-score";
+  const POOP_API_RANKING = "/api/poop-ranking";
+
+  // ---------- canvas ----------
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
-  const CANVAS_SCALE = 0.85;
 
   function resizeCanvas() {
     const r = canvas.getBoundingClientRect();
@@ -39,11 +56,25 @@ window.addEventListener("DOMContentLoaded", () => {
   // ---------- UI ----------
   const viewSelect = document.getElementById("view-select");
   const viewGame = document.getElementById("view-game");
-  const restartBtn = document.getElementById("restart-btn");
+  const viewResult = document.getElementById("view-result");
+
   const centerMessageEl = document.getElementById("center-message");
   const topLeftStatusEl = document.getElementById("top-left-status");
 
-  // ---------- 画像 ----------
+  const startBtn = document.getElementById("start-btn");
+  const backToSelectBtn = document.getElementById("back-to-select");
+  const backToSelectResultBtn = document.getElementById(
+    "back-to-select-result"
+  );
+  const resultRestartBtn = document.getElementById("result-restart-btn");
+
+  // result elements
+  const resultRankEl = document.getElementById("result-rank");
+  const resultLabelEl = document.getElementById("result-label");
+  const resultScoreEl = document.getElementById("result-score");
+  const resultBestListEl = document.getElementById("result-best-list");
+
+  // ---------- images ----------
   const playerImg = new Image();
   playerImg.src = "cleaner.png";
 
@@ -53,8 +84,10 @@ window.addEventListener("DOMContentLoaded", () => {
   const fireballImg = new Image();
   fireballImg.src = "fireball.png";
 
-  // ---------- サウンド ----------
+  // ---------- audio ----------
+  const bgmHome = document.getElementById("bgm-home");
   const bgmGame = document.getElementById("bgm-game");
+  const bgmResult = document.getElementById("bgm-result");
   const seJump = document.getElementById("se-jump");
   const seGameover = document.getElementById("se-gameover");
 
@@ -69,7 +102,15 @@ window.addEventListener("DOMContentLoaded", () => {
     } catch {}
   }
 
-  // ---------- util ----------
+  function stopAudio(a) {
+    if (!a) return;
+    try {
+      a.pause();
+      a.currentTime = 0;
+    } catch {}
+  }
+
+  // ---------- utils ----------
   const rand = (a, b) => Math.random() * (b - a) + a;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -79,7 +120,62 @@ window.addEventListener("DOMContentLoaded", () => {
     a.y < b.y + b.height &&
     a.y + a.height > b.y;
 
-  // ---------- ゲーム状態 ----------
+  function loadBestRuns() {
+    try {
+      const raw = localStorage.getItem(BEST_RUNS_KEY);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      return arr;
+    } catch {
+      return [];
+    }
+  }
+
+  function saveBestRuns(list) {
+    try {
+      localStorage.setItem(BEST_RUNS_KEY, JSON.stringify(list));
+    } catch {
+      // ignore
+    }
+  }
+
+  // ====== サーバー通信（世界ランキング） ======
+
+  // スコア送信（ゲーム終了時に呼ぶ）
+  async function sendScoreToServer(run) {
+    try {
+      await fetch(POOP_API_SCORE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          score: run.score, // = poopCount
+          rank: run.rank,
+          label: run.label
+        })
+      });
+    } catch (err) {
+      console.error("Failed to send score:", err);
+      // サーバー落ちててもゲーム自体は続行したいので、そのまま無視
+    }
+  }
+
+  // ランキング取得（結果画面表示のときに使う）
+  async function fetchLeaderboardFromServer() {
+    try {
+      const res = await fetch(`${POOP_API_RANKING}?limit=${BEST_RUNS_LIMIT}`);
+      if (!res.ok) throw new Error("bad status");
+      const data = await res.json();
+      // data: [{score, rank, label, createdAt}, ...]
+      return data;
+    } catch (err) {
+      console.error("Failed to fetch leaderboard:", err);
+      // サーバーにアクセスできないときはローカルのベストを fallback として使う
+      return loadBestRuns().slice(0, BEST_RUNS_LIMIT);
+    }
+  }
+
+  // ---------- state ----------
   let player;
   let fireballs = [];
   let poopItems = [];
@@ -101,7 +197,13 @@ window.addEventListener("DOMContentLoaded", () => {
   let spawnPoopTimer = 0;
   let nextPoopInterval = 0;
 
-  // ---------- プレイヤー ----------
+  let bgFarOffset = 0;
+  let bgNearOffset = 0;
+
+  let speedLines = [];
+  let particles = [];
+
+  // ---------- player ----------
   function initPlayer() {
     const size = Math.min(canvas.width, canvas.height) * 0.22;
 
@@ -130,27 +232,21 @@ window.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  // ---------- 地形（坂多め＆穴／穴サイズは3段ジャンプ圏内 ＋ 連続穴禁止） ----------
+  // ---------- terrain ----------
   function createTerrainSegment(startX, offset, lastType) {
     const base = player ? player.height : 50;
     const slopeMax = base * 0.6;
 
-    // 坂は短め → 本数が増えて体感2倍
     const widthFlat = rand(base * 1.0, base * 1.4);
     const widthSlope = rand(base * 0.7, base * 1.0);
-
-    // ★ 落とし穴の幅：
-    //    最小 = 0.8 * プレイヤー高さ
-    //    最大 = 1.3 * プレイヤー高さ
-    //    → 何もしないと落ちるが、3段ジャンプなら十分越えられる想定
     const widthGap = rand(base * 0.8, base * 1.3);
 
     let type = "ground";
     let width = widthFlat;
     let startOffset = offset;
     let endOffset = offset;
+    let bonus = false;
 
-    // 時間経過に応じて 0.3 → 0.6 まで増える
     const gapProb = currentGapProb;
     const flatProb = 0.05;
     const slopeProb = 1 - flatProb - gapProb;
@@ -162,20 +258,20 @@ window.addEventListener("DOMContentLoaded", () => {
     if (r < flatProb) {
       width = widthFlat;
     } else if (r < flatProb + upProb) {
-      // 登り坂
+      // up slope
       width = widthSlope;
       endOffset = clamp(offset - rand(base * 0.3, base * 0.6), -slopeMax, 0);
     } else if (r < flatProb + upProb + downProb) {
-      // 下り坂
+      // down slope
       width = widthSlope;
       endOffset = clamp(offset + rand(base * 0.3, base * 0.6), -slopeMax, 0);
     } else {
-      // 落とし穴
+      // gap
       type = "gap";
       width = widthGap;
     }
 
-    // ★ 直前も gap だったら今回の gap は禁止（巨大穴防止）
+    // 連続でギャップにならないように
     if (lastType === "gap" && type === "gap") {
       type = "ground";
       width = widthFlat;
@@ -183,7 +279,12 @@ window.addEventListener("DOMContentLoaded", () => {
       endOffset = offset;
     }
 
-    return { x: startX, width, type, startOffset, endOffset };
+    // bonus segment flag
+    if (type !== "gap" && Math.random() < BONUS_SEGMENT_PROB) {
+      bonus = true;
+    }
+
+    return { x: startX, width, type, startOffset, endOffset, bonus };
   }
 
   function initTerrain() {
@@ -206,19 +307,18 @@ window.addEventListener("DOMContentLoaded", () => {
     for (const seg of terrain) {
       if (x >= seg.x && x <= seg.x + seg.width) {
         if (seg.type === "gap") {
-          return { isGap: true, y: baseY + 9999 };
+          return { isGap: true, y: baseY + 9999, bonus: false };
         }
         const t = (x - seg.x) / seg.width;
         const yOffset = seg.startOffset + (seg.endOffset - seg.startOffset) * t;
-        return { isGap: false, y: baseY + yOffset };
+        return { isGap: false, y: baseY + yOffset, bonus: !!seg.bonus };
       }
     }
-    return { isGap: false, y: baseY };
+    return { isGap: false, y: baseY, bonus: false };
   }
 
   function updateTerrain(delta) {
     const speed = TERRAIN_BASE_SPEED;
-
     terrain.forEach((seg) => (seg.x -= speed * delta));
 
     while (terrain.length && terrain[0].x + terrain[0].width < -200) {
@@ -241,7 +341,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ---------- 炎 ----------
+  // ---------- fireballs ----------
   function resetFireTimer() {
     nextFireInterval = rand(2200, 3800);
     spawnFireTimer = 0;
@@ -257,19 +357,30 @@ window.addEventListener("DOMContentLoaded", () => {
     const spawnX = canvas.width + 20;
 
     const ground = getGroundInfoAtX(spawnX);
-    let y = ground.y - height;
+    let baseY = ground.y - height;
 
+    // sometimes upper lane
     if (Math.random() < 0.35) {
-      y -= base * 1.2;
+      baseY -= base * 1.2;
     }
 
     const speed = rand(220, 300) * 0.9;
+    const amplitude = height * FIRE_SWAY_AMPLITUDE_RATIO;
 
-    fireballs.push({ x: spawnX, y, width, height, speed });
+    fireballs.push({
+      x: spawnX,
+      y: baseY,
+      baseY,
+      width,
+      height,
+      speed,
+      phase: Math.random() * Math.PI * 2,
+      amplitude
+    });
     resetFireTimer();
   }
 
-  // ---------- うんこ ----------
+  // ---------- poops ----------
   function resetPoopTimer() {
     nextPoopInterval = rand(1500, 2600);
     spawnPoopTimer = 0;
@@ -278,9 +389,9 @@ window.addEventListener("DOMContentLoaded", () => {
   function spawnPoop() {
     if (poopItems.length >= MAX_POOP) return;
 
-    // うんちサイズ2倍
     const size = player.height * 1.0;
     const spawnX = canvas.width + 20;
+
     const ground = getGroundInfoAtX(spawnX);
 
     poopItems.push({
@@ -288,14 +399,149 @@ window.addEventListener("DOMContentLoaded", () => {
       y: ground.y - size,
       width: size,
       height: size,
-      speed: 200 * 0.8
+      speed: 200 * 0.8,
+      isBonus: ground.bonus
     });
 
     resetPoopTimer();
   }
 
-  // ---------- メッセージ ----------
-  function showMessage(text, mode) {
+  // ---------- speed lines ----------
+  function initSpeedLines() {
+    speedLines = [];
+    for (let i = 0; i < SPEED_LINE_COUNT; i++) {
+      const len = rand(canvas.height * 0.05, canvas.height * 0.15);
+      speedLines.push({
+        x: rand(0, canvas.width),
+        y: rand(0, canvas.height),
+        length: len,
+        speed: rand(300, 600)
+      });
+    }
+  }
+
+  function updateSpeedLines(delta) {
+    speedLines.forEach((l) => {
+      l.x -= l.speed * delta;
+      if (l.x + 2 < 0) {
+        l.x = canvas.width + rand(0, canvas.width * 0.3);
+        l.y = rand(0, canvas.height);
+        l.length = rand(canvas.height * 0.05, canvas.height * 0.15);
+      }
+    });
+  }
+
+  function drawSpeedLines() {
+    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (const l of speedLines) {
+      ctx.moveTo(l.x, l.y);
+      ctx.lineTo(l.x, l.y + l.length);
+    }
+    ctx.stroke();
+  }
+
+  // ---------- particles ----------
+  function spawnParticles(type) {
+    if (!player) return;
+    const count = 5;
+    for (let i = 0; i < count; i++) {
+      if (particles.length >= MAX_PARTICLES) break;
+
+      const baseX =
+        player.x + player.width * 0.3 + Math.random() * player.width * 0.4;
+      const baseY = player.y + player.height;
+
+      let vyBase;
+      if (type === "jump") {
+        vyBase = rand(10, 40);
+      } else {
+        vyBase = rand(-80, -30);
+      }
+
+      particles.push({
+        x: baseX,
+        y: baseY,
+        vx: rand(-40, 40),
+        vy: vyBase,
+        life: 0,
+        maxLife: rand(0.25, 0.45),
+        size: rand(2, 4)
+      });
+    }
+  }
+
+  function updateParticles(delta) {
+    const gravity = 300;
+    particles.forEach((p) => {
+      p.life += delta;
+      p.x += p.vx * delta;
+      p.y += p.vy * delta;
+      p.vy += gravity * delta;
+    });
+    particles = particles.filter((p) => p.life < p.maxLife);
+  }
+
+  function drawParticles() {
+    ctx.save();
+    particles.forEach((p) => {
+      const alpha = 1 - p.life / p.maxLife;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.fillRect(p.x, p.y, p.size, p.size);
+    });
+    ctx.restore();
+  }
+
+  // ---------- background (parallax) ----------
+  function updateBackground(delta) {
+    bgFarOffset -= BG_FAR_SPEED * delta;
+    bgNearOffset -= BG_NEAR_SPEED * delta;
+  }
+
+  function drawBackgroundLayers() {
+    const w = canvas.width;
+    const h = canvas.height;
+
+    // sky
+    ctx.fillStyle = "#8fd4ff";
+    ctx.fillRect(0, 0, w, h);
+
+    // far mountains
+    const stepFar = 260;
+    const baseYFar = h * 0.55;
+    const offsetFar = ((bgFarOffset % stepFar) + stepFar) % stepFar;
+    ctx.fillStyle = "#c5e1ff";
+    const peakH = 60;
+
+    for (let x = -stepFar + offsetFar; x < w + stepFar; x += stepFar) {
+      ctx.beginPath();
+      ctx.moveTo(x, baseYFar);
+      ctx.lineTo(x + stepFar * 0.5, baseYFar - peakH);
+      ctx.lineTo(x + stepFar, baseYFar);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // near buildings
+    const stepNear = 180;
+    const baseYNear = h * 0.7;
+    const offsetNear = ((bgNearOffset % stepNear) + stepNear) % stepNear;
+    const patternHeights = [60, 80, 50, 90];
+
+    ctx.fillStyle = "#b39ddb";
+    let idx = 0;
+    for (let x = -stepNear + offsetNear; x < w + stepNear; x += stepNear) {
+      const bw = stepNear * 0.6;
+      const bh = patternHeights[idx % patternHeights.length];
+      ctx.fillRect(x, baseYNear - bh, bw, bh);
+      idx++;
+    }
+  }
+
+  // ---------- messages ----------
+  function showMessage(text) {
     centerMessageEl.className = "center-message";
     if (!text) {
       centerMessageEl.classList.add("hidden");
@@ -307,11 +553,64 @@ window.addEventListener("DOMContentLoaded", () => {
     div.innerHTML = text.replace(/\n/g, "<br>");
     centerMessageEl.innerHTML = "";
     centerMessageEl.appendChild(div);
-
-    if (mode === "grade") centerMessageEl.classList.add("center-message--grade");
   }
 
-  // ---------- ゲーム初期化 ----------
+  // ---------- result view ----------
+  function updateResultView(rank, label, score, topRuns) {
+    resultRankEl.textContent = rank;
+    resultLabelEl.textContent = label;
+    resultScoreEl.textContent = `Poops collected: ${score}`;
+
+    if (!topRuns || topRuns.length === 0) {
+      resultBestListEl.innerHTML =
+        '<li class="best-empty">No best runs yet. Try again!</li>';
+      return;
+    }
+
+    resultBestListEl.innerHTML = topRuns
+      .map(
+        (r, i) => `
+        <li class="best-item">
+          <span class="best-rank-badge">#${i + 1}</span>
+          <span class="best-score">${r.score}</span>
+          <span class="best-rank-text">${r.rank}</span>
+        </li>
+      `
+      )
+      .join("");
+  }
+
+  function showOnlyView(targetView) {
+    [viewSelect, viewGame, viewResult].forEach((v) =>
+      v.classList.remove("active")
+    );
+    targetView.classList.add("active");
+  }
+
+  // 紙吹雪
+  function spawnConfetti(count = 60) {
+    const colors = [
+      "#ff5252",
+      "#ffb300",
+      "#ffd740",
+      "#69f0ae",
+      "#40c4ff",
+      "#e040fb"
+    ];
+    for (let i = 0; i < count; i++) {
+      const div = document.createElement("div");
+      div.className = "confetti";
+      div.style.left = Math.random() * 100 + "vw";
+      div.style.backgroundColor =
+        colors[Math.floor(Math.random() * colors.length)];
+      div.style.animationDelay = Math.random() * 0.4 + "s";
+      div.style.transform = `translateY(0) rotateZ(${Math.random() * 360}deg)`;
+      document.body.appendChild(div);
+      setTimeout(() => div.remove(), 2000);
+    }
+  }
+
+  // ---------- reset / start ----------
   function resetGame() {
     resizeCanvas();
     initPlayer();
@@ -319,6 +618,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
     fireballs = [];
     poopItems = [];
+    particles = [];
+    speedLines = [];
     poopCount = 0;
 
     gameStarted = false;
@@ -327,36 +628,43 @@ window.addEventListener("DOMContentLoaded", () => {
     elapsedTime = 0;
     currentGapProb = BASE_GAP_PROB;
 
+    bgFarOffset = 0;
+    bgNearOffset = 0;
+
     resetFireTimer();
     resetPoopTimer();
+    initSpeedLines();
 
-    topLeftStatusEl.textContent = "回収うんこ：0個";
-    showMessage("うんこを拾いながら街を爆走！", null);
+    topLeftStatusEl.textContent = "Poops: 0";
+    showMessage("Dash through the city and collect poop!");
   }
 
   function startGame() {
     gameStarted = true;
     startTime = performance.now();
-    playAudio(bgmGame, "bgm");
     showMessage("");
   }
 
-  // ---------- 入力 ----------
+  // ---------- input ----------
   function jump() {
     if (gameOver) return;
-
     if (!gameStarted) startGame();
 
     if (player && player.jumpCount < player.maxJumps) {
       player.vy = player.jumpPower;
+      const wasOnGround = player.onGround;
       player.onGround = false;
       player.jumpCount++;
       playAudio(seJump, "se");
+      if (wasOnGround) spawnParticles("jump");
     }
   }
 
   window.addEventListener("keydown", (e) => {
-    if (e.code === "Space") jump();
+    if (e.code === "Space") {
+      e.preventDefault();
+      jump();
+    }
   });
   canvas.addEventListener("pointerdown", jump);
 
@@ -370,8 +678,14 @@ window.addEventListener("DOMContentLoaded", () => {
     currentGapProb = BASE_GAP_PROB + MAX_EXTRA_GAP_PROB * rate;
 
     updateTerrain(delta);
+    updateBackground(delta);
+    updateSpeedLines(delta);
+    updateParticles(delta);
 
+    // player physics
     if (player) {
+      const wasOnGround = player.onGround;
+
       player.vy += player.gravity * delta;
       player.y += player.vy * delta;
 
@@ -385,8 +699,10 @@ window.addEventListener("DOMContentLoaded", () => {
           player.vy = 0;
           player.jumpCount = 0;
           player.onGround = true;
+          if (!wasOnGround) spawnParticles("land");
         }
       } else {
+        player.onGround = false;
         if (player.y > canvas.height) return endGame();
       }
     }
@@ -399,18 +715,26 @@ window.addEventListener("DOMContentLoaded", () => {
     if (spawnPoopTimer >= nextPoopInterval) spawnPoop();
 
     // move
-    fireballs.forEach((f) => (f.x -= f.speed * delta));
-    poopItems.forEach((p) => (p.x -= p.speed * delta));
+    fireballs.forEach((f) => {
+      f.x -= f.speed * delta;
+      f.phase += FIRE_SWAY_SPEED * delta;
+      f.y = f.baseY + Math.sin(f.phase) * f.amplitude;
+    });
+
+    poopItems.forEach((p) => {
+      p.x -= p.speed * delta;
+    });
 
     // collision
     if (player) {
       const hit = getPlayerHitbox();
 
+      // fireballs
       for (const f of fireballs) {
         const w = f.width * 0.45;
         const h = f.height * 0.45;
 
-      const fb = {
+        const fb = {
           x: f.x + w / 2,
           y: f.y + h / 2,
           width: f.width - w,
@@ -420,11 +744,16 @@ window.addEventListener("DOMContentLoaded", () => {
         if (rectOverlap(hit, fb)) return endGame();
       }
 
+      // poops
       for (let i = poopItems.length - 1; i >= 0; i--) {
         if (rectOverlap(hit, poopItems[i])) {
+          const item = poopItems[i];
           poopItems.splice(i, 1);
-          poopCount++;
-          topLeftStatusEl.textContent = `回収うんこ：${poopCount}個`;
+
+          const add = item.isBonus ? 2 : 1;
+          poopCount += add;
+
+          topLeftStatusEl.textContent = `Poops: ${poopCount}`;
         }
       }
     }
@@ -435,15 +764,22 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // ---------- draw ----------
   function draw() {
-    ctx.fillStyle = "#8fd4ff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    drawBackgroundLayers();
 
     const baseY = getGroundY();
-    ctx.strokeStyle = "#666";
+
+    // ground band
+    const grad = ctx.createLinearGradient(0, baseY - 40, 0, canvas.height);
+    grad.addColorStop(0, "#ffe0b2");
+    grad.addColorStop(1, "#ffb74d");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, baseY - 40, canvas.width, canvas.height - (baseY - 40));
+
+    // ground line
     ctx.lineWidth = 2;
+    ctx.strokeStyle = "#666";
     ctx.beginPath();
     let started = false;
-
     for (const seg of terrain) {
       if (seg.type === "gap") {
         started = false;
@@ -464,24 +800,38 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     ctx.stroke();
 
+    // gaps
+    ctx.fillStyle = "rgba(0,0,0,0.15)";
+    for (const seg of terrain) {
+      if (seg.type !== "gap") continue;
+      const x1 = seg.x;
+      const x2 = seg.x + seg.width;
+      ctx.fillRect(x1, baseY, x2 - x1, canvas.height - baseY);
+    }
+
+    // poops
     poopItems.forEach((p) => {
       if (poopImg.complete && poopImg.naturalWidth > 0) {
         ctx.drawImage(poopImg, p.x, p.y, p.width, p.height);
       }
     });
 
+    // fireballs
     fireballs.forEach((f) => {
       if (fireballImg.complete && fireballImg.naturalWidth > 0) {
         ctx.drawImage(fireballImg, f.x, f.y, f.width, f.height);
       }
     });
 
+    drawParticles();
+    drawSpeedLines();
+
     if (player && playerImg.complete && playerImg.naturalWidth > 0) {
       ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
     }
   }
 
-  // ---------- 30fps loop ----------
+  // ---------- loop ----------
   let lastTime = 0;
   const FRAME = 1000 / 30;
 
@@ -490,7 +840,8 @@ window.addEventListener("DOMContentLoaded", () => {
     const elapsed = t - lastTime;
 
     if (elapsed >= FRAME) {
-      update(Math.min(elapsed / 1000, 0.05));
+      const delta = Math.min(elapsed / 1000, 0.05);
+      update(delta);
       draw();
       lastTime = t;
     }
@@ -498,44 +849,119 @@ window.addEventListener("DOMContentLoaded", () => {
   }
   requestAnimationFrame(loop);
 
+  // ---------- rank evaluation ----------
+  function evaluateRank(c) {
+    let rank = "F";
+    let label = "lolol";
+
+    if (c <= 10) {
+      rank = "F";
+      label = "lolol";
+    } else if (c <= 20) {
+      rank = "D";
+      label = "Clumsy Collector";
+    } else if (c <= 30) {
+      rank = "C";
+      label = "Still Learning";
+    } else if (c <= 40) {
+      rank = "C+";
+      label = "Not Bad";
+    } else if (c <= 50) {
+      rank = "B";
+      label = "Pretty Good";
+    } else if (c <= 60) {
+      rank = "B+";
+      label = "Poop Enthusiast";
+    } else if (c <= 70) {
+      rank = "A";
+      label = "Nice Run!";
+    } else if (c <= 80) {
+      rank = "A+";
+      label = "Professional Pooper";
+    } else if (c <= 90) {
+      rank = "S";
+      label = "Legendary Poop";
+    } else if (c <= 99) {
+      rank = "S+";
+      label = "Almost God";
+    } else {
+      rank = "SS";
+      label = "Poop Overlord";
+    }
+    return { rank, label };
+  }
+
   // ---------- end ----------
-  function endGame() {
+  async function endGame() {
     if (gameOver) return;
     gameOver = true;
 
     playAudio(seGameover, "se");
+    stopAudio(bgmGame);
+    playAudio(bgmResult, "bgm");
 
-    let g = "";
     const c = poopCount;
+    const { rank, label } = evaluateRank(c);
 
-    if (c <= 10) g = "wwww";
-    else if (c <= 20) g = "称号「へたっぴ」";
-    else if (c <= 30) g = "称号「まだまだへたっぴ」";
-    else if (c <= 40) g = "称号「評価は普通」";
-    else if (c <= 50) g = "称号「上手だ」";
-    else if (c <= 60) g = "称号「うんこ収集家」";
-    else if (c <= 70) g = "称号「やるやん」";
-    else if (c <= 80) g = "称号「1人前なうんこ」";
-    else if (c <= 90) g = "称号「立派なうんこ」";
-    else if (c <= 99) g = "称号「あと一息」！";
-    else g = "称号「うんこ大臣」";
+    // ローカルのベスト更新
+    const bestRuns = loadBestRuns();
+    const newRun = { score: c, rank, label };
+    bestRuns.push(newRun);
+    bestRuns.sort((a, b) => b.score - a.score);
+    const localTop = bestRuns.slice(0, BEST_RUNS_LIMIT);
+    saveBestRuns(localTop);
 
-    showMessage(g, "grade");
+    // サーバーへスコア送信（世界ランキングに反映）
+    await sendScoreToServer(newRun);
+
+    // 世界ランキング取得（失敗したらローカル best を返す）
+    const topRuns = await fetchLeaderboardFromServer();
+
+    updateResultView(rank, label, c, topRuns);
+
+    // 画面切り替え
+    showOnlyView(viewResult);
+
+    // アニメーション
+    const resultFrame = document.querySelector(".result-frame");
+    if (resultFrame) {
+      resultFrame.classList.remove("pop-in");
+      void resultFrame.offsetWidth;
+      resultFrame.classList.add("pop-in");
+    }
+
+    spawnConfetti();
   }
 
-  // ---------- 画面切り替え ----------
-  document.getElementById("start-btn").addEventListener("click", () => {
-    viewSelect.classList.remove("active");
-    viewGame.classList.add("active");
+  // ---------- view switch ----------
+  startBtn.addEventListener("click", () => {
+    showOnlyView(viewGame);
+    stopAudio(bgmHome);
+    stopAudio(bgmResult);
+    playAudio(bgmGame, "bgm");
     resetGame();
   });
 
-  restartBtn.addEventListener("click", resetGame);
-  document.getElementById("back-to-select").addEventListener("click", () => {
-    viewSelect.classList.add("active");
-    viewGame.classList.remove("active");
+  backToSelectBtn.addEventListener("click", () => {
+    showOnlyView(viewSelect);
+    stopAudio(bgmGame);
+    playAudio(bgmHome, "bgm");
   });
 
-  // 初期
-  viewSelect.classList.add("active");
+  backToSelectResultBtn.addEventListener("click", () => {
+    showOnlyView(viewSelect);
+    stopAudio(bgmResult);
+    playAudio(bgmHome, "bgm");
+  });
+
+  resultRestartBtn.addEventListener("click", () => {
+    showOnlyView(viewGame);
+    stopAudio(bgmResult);
+    playAudio(bgmGame, "bgm");
+    resetGame();
+  });
+
+  // ---------- initial ----------
+  showOnlyView(viewSelect);
+  playAudio(bgmHome, "bgm");
 });

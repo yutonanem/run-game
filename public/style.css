@@ -13,9 +13,7 @@ body {
 body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-
   background-color: #ffd9e6;
-  /* 単純な縦グラデーションのみ（かなり軽い） */
   background-image: linear-gradient(#ffeef5, #ffd9e6);
 }
 
@@ -94,8 +92,9 @@ body {
   line-height: 1.6;
 }
 
-/* ボタン */
-.stage-btn {
+/* ボタン共通 */
+.stage-btn,
+.primary-btn {
   display: block;
   width: 100%;
   border: none;
@@ -106,6 +105,10 @@ body {
   letter-spacing: 0.18em;
   text-align: center;
   cursor: pointer;
+}
+
+/* スタートボタン */
+.stage-btn {
   background: linear-gradient(90deg, #ffb11b, #ff8c00);
   color: #fff;
   box-shadow: 0 8px 20px rgba(255, 140, 0, 0.4);
@@ -118,7 +121,6 @@ body {
 
 /* ===== ゲーム画面 ===== */
 
-/* 柄をやめて、シンプルな縦グラデーションに */
 .view-game {
   background: linear-gradient(#ffd9e6, #ffc1e3);
 }
@@ -174,7 +176,7 @@ body {
   height: min(60vh, 420px);
 }
 
-/* 下部情報行 */
+/* 下部情報行（今は未使用だが残しておく） */
 .hud-row.bottom-info {
   display: flex;
   justify-content: space-between;
@@ -184,26 +186,6 @@ body {
 
 .bottom-text {
   min-width: 0;
-}
-
-/* リスタートボタン */
-.primary-btn {
-  display: block;
-  margin: 12px auto 0;
-  padding: 9px 28px;
-  border-radius: 999px;
-  border: none;
-  font-size: 16px;
-  font-weight: 600;
-  background: linear-gradient(135deg, #203a93, #101c4f);
-  color: #fff;
-  cursor: pointer;
-  box-shadow: 0 10px 25px rgba(16, 28, 79, 0.45);
-}
-
-.primary-btn:active {
-  transform: translateY(1px);
-  box-shadow: 0 5px 14px rgba(16, 28, 79, 0.55);
 }
 
 /* ===== 画面中央メッセージ ===== */
@@ -233,15 +215,150 @@ body {
   font-size: clamp(20px, 3vw, 26px);
 }
 
-/* 失敗・評価用：大きく＆赤太文字ベース */
-.center-message--fail .center-message-inner,
-.center-message--grade .center-message-inner {
-  background: rgba(255, 255, 255, 0.98);
+/* ===== 結果画面 ===== */
+
+.view-result {
+  background: #ffffff;
+}
+
+.result-header {
+  padding: 12px 20px 4px;
+}
+
+.result-main {
+  padding: 24px 16px 36px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.result-frame {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 40px 20px 28px;
+  border-radius: 32px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15);
+}
+
+/* RANK表示 */
+.result-rank-title {
+  font-size: clamp(40px, 5vw, 52px);
+  font-weight: 900;
+  letter-spacing: 0.1em;
   color: #e60033;
-  border: 4px solid #ff1744;
-  box-shadow: 0 0 0 6px rgba(255, 23, 68, 0.25),
-    0 18px 40px rgba(0, 0, 0, 0.4);
-  font-size: clamp(48px, 8vw, 72px);
+  margin: 0 0 28px;
+}
+
+.result-rank-value {
+  font-size: 1.2em;
+}
+
+/* 真ん中の白いカード */
+.result-panel {
+  width: min(520px, 100%);
+  margin: 0 auto 26px;
+  padding: 26px 32px 20px;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* コメントなど */
+.result-main-label {
+  font-size: clamp(24px, 3vw, 30px);
+  font-weight: 800;
+  margin: 0 0 8px;
+}
+
+.result-count {
+  font-size: 16px;
+  margin: 0 0 14px;
+}
+
+/* ベストラン部分 */
+.result-best-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 8px 0 6px;
+}
+
+.result-best-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* ランキング1行 */
+.best-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px;
+  font-size: 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.best-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 800;
+  color: #fff;
+  background: #9e9e9e;
+}
+
+/* 上位3位を派手に */
+.result-best-list li:nth-child(1) .best-rank-badge {
+  background: linear-gradient(135deg, #ffd700, #ffb300);
+}
+.result-best-list li:nth-child(2) .best-rank-badge {
+  background: linear-gradient(135deg, #cfd8dc, #b0bec5);
+}
+.result-best-list li:nth-child(3) .best-rank-badge {
+  background: linear-gradient(135deg, #ffcc80, #ffb74d);
+}
+
+.best-score {
+  font-weight: 700;
+}
+
+.best-rank-text {
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.best-empty {
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+
+/* 結果画面のボタン */
+.primary-btn {
+  width: auto;
+  margin: 14px auto 0;
+  padding: 12px 40px;
+  border-radius: 999px;
+  border: none;
+  font-size: 18px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #203a93, #101c4f);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgba(16, 28, 79, 0.45);
+}
+
+.primary-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 5px 14px rgba(16, 28, 79, 0.55);
 }
 
 /* 左上ステータス（うんこ数） */
@@ -258,7 +375,50 @@ body {
   letter-spacing: 0.08em;
 }
 
-/* ===== スマホ向けレイアウト調整（見た目だけ） ===== */
+/* 結果カードのポップアニメーション */
+@keyframes result-pop {
+  0% {
+    transform: scale(0.6) translateY(40px);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.05) translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.result-frame.pop-in {
+  animation: result-pop 0.6s ease-out;
+}
+
+/* 紙吹雪 */
+.confetti {
+  position: fixed;
+  top: -10px;
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0.9;
+  animation: confetti-fall 1.6s linear forwards;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(0) rotateZ(0deg);
+  }
+  100% {
+    transform: translateY(110vh) rotateZ(360deg);
+    opacity: 0;
+  }
+}
+
+/* ===== スマホ向けレイアウト調整 ===== */
 @media (max-width: 768px) {
   .app-root {
     padding: 0;
@@ -293,5 +453,14 @@ body {
   .select-hero-img {
     width: 40vw;
     max-width: 220px;
+  }
+
+  .result-panel {
+    width: 100%;
+    padding: 22px 18px 18px;
+  }
+
+  .primary-btn {
+    width: 80%;
   }
 }

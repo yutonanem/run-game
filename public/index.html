@@ -1,48 +1,37 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>うんこ集め</title>
+    <title>Poop Runner</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <div class="app-root">
-      <!-- ===== スタート画面（うんこを拾うボタンだけ） ===== -->
+      <!-- ===== Start screen ===== -->
       <div id="view-select" class="view view-select active">
-        <header class="select-header">
-          <!-- タイトル入れたければここに h1 置いてOK -->
-        </header>
-
+        <header class="select-header"></header>
         <main class="select-main">
           <section class="stage-card">
-            <!-- でっかいうんこイラスト -->
             <div class="select-hero">
-              <img
-                src="poop.png"
-                alt="うんこのイラスト"
-                class="select-hero-img"
-              />
+              <img src="poop.png" alt="Poop icon" class="select-hero-img" />
             </div>
 
-            <!-- 説明 & ボタン -->
             <div class="select-copy">
               <p class="select-desc">
-                うんこを拾いながら街を爆走<br />
-                集めた数で称号が変わる！
+                Dash through the city and collect poop.<br />
+                Your title changes depending on how much you pick up!
               </p>
-              <button id="start-btn" class="stage-btn">うんこを拾う</button>
+              <button id="start-btn" class="stage-btn">START RUN</button>
             </div>
           </section>
         </main>
       </div>
 
-      <!-- ===== ゲーム画面 ===== -->
+      <!-- ===== Game view ===== -->
       <div id="view-game" class="view view-game">
         <header class="game-header">
-          <button id="back-to-select" class="back-link">
-            ← 戻る
-          </button>
+          <button id="back-to-select" class="back-link">← Back</button>
         </header>
 
         <main class="game-main">
@@ -50,12 +39,12 @@
             <div class="canvas-shell">
               <canvas id="gameCanvas"></canvas>
 
-              <!-- 画面中央メッセージ -->
+              <!-- center message -->
               <div id="center-message" class="center-message hidden"></div>
 
-              <!-- 左上ステータス（うんこ数） -->
+              <!-- top-left status -->
               <div id="top-left-status" class="top-left-status">
-                回収うんこ：0個
+                Poops: 0
               </div>
             </div>
 
@@ -64,9 +53,34 @@
               <div id="bottom-center" class="bottom-text"></div>
               <div id="bottom-right" class="bottom-text"></div>
             </div>
+          </div>
+        </main>
+      </div>
 
-            <button id="restart-btn" class="primary-btn restart-btn">
-              もう一度プレイ
+      <!-- ===== Result view ===== -->
+      <div id="view-result" class="view view-result">
+        <header class="result-header">
+          <button id="back-to-select-result" class="back-link">← Back</button>
+        </header>
+
+        <main class="result-main">
+          <div class="result-frame">
+            <h1 class="result-rank-title">
+              RANK: <span id="result-rank" class="result-rank-value">F</span>
+            </h1>
+
+            <section class="result-panel">
+              <h2 id="result-label" class="result-main-label">lolol</h2>
+              <p id="result-score" class="result-count">Poops collected: 0</p>
+
+              <h3 class="result-best-title">Best Runs</h3>
+              <ul id="result-best-list" class="result-best-list">
+                <!-- JSで中身を生成 -->
+              </ul>
+            </section>
+
+            <button id="result-restart-btn" class="primary-btn result-btn">
+              Play Again
             </button>
           </div>
         </main>
@@ -76,10 +90,12 @@
     <!-- ===== BGM / SE ===== -->
     <audio id="bgm-home" src="bgm_home.mp3" preload="auto" loop></audio>
     <audio id="bgm-game" src="bgm_game.mp3" preload="auto" loop></audio>
+    <audio id="bgm-result" src="bgm_result.mp3" preload="auto" loop></audio>
+
     <audio id="se-jump" src="se_jump.mp3" preload="auto"></audio>
     <audio id="se-gameover" src="se_gameover.mp3" preload="auto"></audio>
 
-    <!-- ゲーム本体 -->
+    <!-- game script -->
     <script src="./game.js"></script>
   </body>
 </html>

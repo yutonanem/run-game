@@ -1,4 +1,4 @@
-// server.js （run-game グローバルランキング・CommonJS版）
+// server.js （run-game グローバルランキング + Poop Runner ランキング）
 
 const express = require("express");
 const path = require("path");
@@ -12,7 +12,11 @@ app.use(express.json());
 // public 配下の静的ファイルを配信
 app.use(express.static("public"));
 
-// ====== グローバルランキング（サーバーのメモリに保持） ======
+/* =====================================================
+ *  もともとのランキングAPI（time ベース）
+ *  ※既存の実装はそのまま温存
+ * ===================================================*/
+
 let ranking = []; // { name: string, time: number } の配列
 
 // ランキング取得（全ユーザー共通）
@@ -58,7 +62,68 @@ app.post("/api/score", (req, res) => {
   res.json(top);
 });
 
-// それ以外のリクエストは index.html を返す
+/* =====================================================
+ *  Poop Runner 用 世界ランキングAPI
+ *  （サーバーのメモリ上に保持・スコアが大きいほど上位）
+ * ===================================================*/
+
+// { score: number, rank: string, label: string, createdAt: number } の配列
+let poopRanking = [];
+
+// Poop Runner のランキング取得
+app.get("/api/poop-ranking", (req, res) => {
+  const limitRaw = req.query.limit;
+  const limit = Number.isFinite(Number(limitRaw))
+    ? Number(limitRaw)
+    : 10;
+
+  const top = poopRanking
+    .slice() // 念のためコピー
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score; // スコア高い順
+      return a.createdAt - b.createdAt; // 同点なら古い順
+    })
+    .slice(0, limit);
+
+  res.json(top);
+});
+
+// Poop Runner のスコア送信
+app.post("/api/poop-score", (req, res) => {
+  const { score, rank, label } = req.body || {};
+
+  if (
+    typeof score !== "number" ||
+    !Number.isFinite(score)
+  ) {
+    return res.status(400).json({ error: "score must be number" });
+  }
+
+  const entry = {
+    score,
+    rank: typeof rank === "string" ? rank : "F",
+    label: typeof label === "string" ? label : "",
+    createdAt: Date.now()
+  };
+
+  poopRanking.push(entry);
+
+  // スコア順でソートして、上位だけ残す
+  poopRanking.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.createdAt - b.createdAt;
+  });
+  poopRanking = poopRanking.slice(0, 100); // 最大100件だけ保持
+
+  // ついでにTOP10を返してあげる
+  const top = poopRanking.slice(0, 10);
+  res.json(top);
+});
+
+/* =====================================================
+ *  それ以外のリクエストは index.html を返す
+ * ===================================================*/
+
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
