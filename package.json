@@ -11,5 +11,17 @@
   "license": "MIT",
   "dependencies": {
     "express": "^4.19.2"
-  }
+  },
+  "devDependencies": {
+    "electron": "^39.2.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yutonanem/run-game.git"
+  },
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/yutonanem/run-game/issues"
+  },
+  "homepage": "https://github.com/yutonanem/run-game#readme"
 }

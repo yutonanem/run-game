@@ -49,6 +49,24 @@ body {
 
 .select-header {
   padding: 20px 28px 8px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* Settings ボタン */
+.settings-btn {
+  border: none;
+  background: rgba(0, 0, 0, 0.05);
+  color: #444;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.settings-btn:active {
+  transform: translateY(1px);
 }
 
 .select-main {
@@ -289,21 +307,22 @@ body {
   list-style: none;
   padding: 0;
   margin: 0;
-  max-height: 200px;
+  max-height: 260px;
   overflow-y: auto;
 }
 
 /* ランキング1行 */
 .best-item {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto auto 1fr auto;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 8px 4px;
   font-size: 16px;
   border-bottom: 1px solid #eee;
 }
 
+/* #1,#2,#3 の派手な丸 */
 .best-rank-badge {
   display: inline-flex;
   align-items: center;
@@ -316,7 +335,6 @@ body {
   background: #9e9e9e;
 }
 
-/* 上位3位を派手に */
 .result-best-list li:nth-child(1) .best-rank-badge {
   background: linear-gradient(135deg, #ffd700, #ffb300);
 }
@@ -327,13 +345,63 @@ body {
   background: linear-gradient(135deg, #ffcc80, #ffb74d);
 }
 
-.best-score {
+/* アバター */
+.best-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #e0e0e0;
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* 影の人アイコン（CSSで簡易的に） */
+.best-avatar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+      circle at 50% 32%,
+      rgba(0, 0, 0, 0.65) 0,
+      rgba(0, 0, 0, 0.65) 26%,
+      transparent 27%
+    ),
+    radial-gradient(
+      ellipse at 50% 85%,
+      rgba(0, 0, 0, 0.65) 0,
+      rgba(0, 0, 0, 0.65) 38%,
+      transparent 39%
+    );
+}
+
+/* 写真を持っている場合は影アイコンを消す */
+.best-avatar.has-image::before {
+  display: none;
+}
+
+
+.best-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* プレイヤー名＋スコア */
+.best-name {
   font-weight: 700;
+  font-size: 14px;
+}
+
+.best-score {
+  font-weight: 800;
+  margin-left: 4px;
 }
 
 .best-rank-text {
   font-weight: 600;
   opacity: 0.8;
+  margin-left: 8px;
 }
 
 .best-empty {
@@ -416,6 +484,219 @@ body {
     transform: translateY(110vh) rotateZ(360deg);
     opacity: 0;
   }
+}
+
+/* ===== ゲーム→結果へのトランジション演出 ===== */
+
+.transition-overlay {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at center, #ffffff 0, #ffffff 40%, transparent 65%);
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.6);
+  z-index: 9000;
+}
+
+.transition-overlay.hidden {
+  display: none;
+}
+
+.transition-overlay.show {
+  display: block;
+  animation: transition-flash 0.7s ease-out forwards;
+}
+
+@keyframes transition-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.3);
+  }
+}
+
+/* ===== Player Settings モーダル ===== */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.modal-content {
+  position: relative;
+  width: min(480px, 90vw);
+  max-height: 90vh;
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  padding: 22px 22px 18px;
+  z-index: 1;
+  overflow-y: auto;
+}
+
+.modal-title {
+  margin: 0 0 14px;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.modal-field {
+  margin-bottom: 16px;
+}
+
+.modal-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+#setting-name {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+}
+
+/* avatar area */
+
+.avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar-preview-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #e0e0e0;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.avatar-preview {
+  width: 100%;
+  height: 100%;
+}
+
+/* ここでもデフォルト影アイコンを使う */
+.avatar-preview::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+      circle at 50% 32%,
+      rgba(0, 0, 0, 0.7) 0,
+      rgba(0, 0, 0, 0.7) 26%,
+      transparent 27%
+    ),
+    radial-gradient(
+      ellipse at 50% 85%,
+      rgba(0, 0, 0, 0.7) 0,
+      rgba(0, 0, 0, 0.7) 40%,
+      transparent 41%
+    );
+}
+
+.avatar-preview.has-image::before {
+  display: none;
+}
+
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.small-btn {
+  border-radius: 999px;
+  border: none;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #eeeeee;
+  cursor: pointer;
+}
+
+.small-btn:active {
+  transform: translateY(1px);
+}
+
+.primary-small {
+  background: linear-gradient(135deg, #203a93, #101c4f);
+  color: #fff;
+}
+
+/* カメラプレビュー */
+
+.camera-area {
+  margin-top: 10px;
+}
+
+.camera-video {
+  width: 100%;
+  border-radius: 16px;
+  background: #000;
+}
+
+.camera-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.secondary-btn {
+  background: #eeeeee;
+  color: #333;
+}
+
+.primary-btn.small,
+.secondary-btn.small {
+  padding: 8px 18px;
+  font-size: 14px;
+}
+
+/* Utility */
+.hidden {
+  display: none !important;
 }
 
 /* ===== スマホ向けレイアウト調整 ===== */
