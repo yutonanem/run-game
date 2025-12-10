@@ -67,15 +67,13 @@ app.post("/api/score", (req, res) => {
  *  （サーバーのメモリ上に保持・スコアが大きいほど上位）
  * ===================================================*/
 
-// { score: number, rank: string, label: string, name: string, createdAt: number } の配列
+// { score, rank, label, name, avatarDataUrl, createdAt } の配列
 let poopRanking = [];
 
 // Poop Runner のランキング取得
 app.get("/api/poop-ranking", (req, res) => {
   const limitRaw = req.query.limit;
-  const limit = Number.isFinite(Number(limitRaw))
-    ? Number(limitRaw)
-    : 10;
+  const limit = Number.isFinite(Number(limitRaw)) ? Number(limitRaw) : 10;
 
   const top = poopRanking
     .slice() // 念のためコピー
@@ -90,7 +88,7 @@ app.get("/api/poop-ranking", (req, res) => {
 
 // Poop Runner のスコア送信
 app.post("/api/poop-score", (req, res) => {
-  const { score, rank, label, name } = req.body || {};
+  const { score, rank, label, name, avatarDataUrl } = req.body || {};
 
   if (typeof score !== "number" || !Number.isFinite(score)) {
     return res.status(400).json({ error: "score must be number" });
@@ -100,11 +98,22 @@ app.post("/api/poop-score", (req, res) => {
   const playerName =
     typeof name === "string" && name.trim() ? name.trim() : "Anonymous";
 
+  // avatar は data:image 形式だけ受け付ける（変なURL対策 & サイズ制限）
+  let safeAvatar = null;
+  if (typeof avatarDataUrl === "string") {
+    const trimmed = avatarDataUrl.trim();
+    const MAX_LEN = 200000; // ざっくりサイズ上限（必要なら調整してOK）
+    if (trimmed.startsWith("data:image/") && trimmed.length <= MAX_LEN) {
+      safeAvatar = trimmed;
+    }
+  }
+
   const entry = {
     score,
     rank: typeof rank === "string" ? rank : "F",
     label: typeof label === "string" ? label : "",
     name: playerName,
+    avatarDataUrl: safeAvatar,
     createdAt: Date.now()
   };
 
@@ -121,7 +130,6 @@ app.post("/api/poop-score", (req, res) => {
   const top = poopRanking.slice(0, 10);
   res.json(top);
 });
-
 
 /* =====================================================
  *  それ以外のリクエストは index.html を返す

@@ -21,13 +21,13 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const VOLUME = {
     // BGM
-    bgmHome: 0.40,   // タイトル
-    bgmGame: 0.40,   // プレイ中（ちょい元気）
-    bgmResult: 0.40, // 結果画面（少し落ち着き）
+    bgmHome: 0.4, // タイトル
+    bgmGame: 0.4, // プレイ中
+    bgmResult: 0.4, // 結果画面
 
     // SE
-    seJump: 0.70,
-    seGameover: 0.80
+    seJump: 0.7,
+    seGameover: 0.8
   };
 
   const CANVAS_SCALE = 0.85;
@@ -123,11 +123,11 @@ window.addEventListener("DOMContentLoaded", () => {
   const seJump = document.getElementById("se-jump");
   const seGameover = document.getElementById("se-gameover");
 
-  // ★ここから追加：初期ボリュームを設定
-  if (bgmHome)   bgmHome.volume   = VOLUME.bgmHome;
-  if (bgmGame)   bgmGame.volume   = VOLUME.bgmGame;
+  // ★初期ボリューム設定
+  if (bgmHome) bgmHome.volume = VOLUME.bgmHome;
+  if (bgmGame) bgmGame.volume = VOLUME.bgmGame;
   if (bgmResult) bgmResult.volume = VOLUME.bgmResult;
-  if (seJump)    seJump.volume    = VOLUME.seJump;
+  if (seJump) seJump.volume = VOLUME.seJump;
   if (seGameover) seGameover.volume = VOLUME.seGameover;
 
   function playAudio(a, type) {
@@ -227,7 +227,9 @@ window.addEventListener("DOMContentLoaded", () => {
           score: run.score,
           rank: run.rank,
           label: run.label,
-          name: playerName
+          name: playerName,
+          // ここで avatar も一緒に送る
+          avatarDataUrl: profile.avatarDataUrl || null
         })
       });
     } catch (err) {
@@ -643,14 +645,24 @@ window.addEventListener("DOMContentLoaded", () => {
         const displayScore = r.score ?? 0;
         const displayRank = r.rank || "?";
 
-        // この行が自分のスコアっぽかったらアバターを自分のものに
         const isSelf = rawName === currentName;
 
+        // サーバーから avatar が来ていればそれを使う
+        let avatarUrl =
+          typeof r.avatarDataUrl === "string" && r.avatarDataUrl
+            ? r.avatarDataUrl
+            : null;
+
+        // 古いデータなどで avatar が無くて、自分の行ならローカルのを使う
+        if (!avatarUrl && isSelf && profile.avatarDataUrl) {
+          avatarUrl = profile.avatarDataUrl;
+        }
+
         let avatarHtml = '<div class="best-avatar"></div>';
-        if (isSelf && profile.avatarDataUrl) {
+        if (avatarUrl) {
           avatarHtml = `
             <div class="best-avatar has-image">
-              <img class="best-avatar-img" src="${profile.avatarDataUrl}" alt="avatar" />
+              <img class="best-avatar-img" src="${avatarUrl}" alt="avatar" />
             </div>
           `;
         }
@@ -1136,6 +1148,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const name = settingNameInput.value.trim();
     profile.name = name || "Player";
     saveProfile(profile);
+    renderAvatarPreview();
     closeSettings();
   });
 
@@ -1149,6 +1162,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const reader = new FileReader();
     reader.onload = () => {
       profile.avatarDataUrl = reader.result;
+      saveProfile(profile);
       renderAvatarPreview();
     };
     reader.readAsDataURL(file);
