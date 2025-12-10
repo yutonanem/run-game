@@ -1,4 +1,4 @@
-// ====== Poop Runner (with settings, avatars, transition & global ranking + names) ======
+// ====== Poop Runner (with settings, avatars, transition & global ranking + shared avatars) ======
 "use strict";
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -21,13 +21,12 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const VOLUME = {
     // BGM
-    bgmHome: 0.4, // タイトル
-    bgmGame: 0.4, // プレイ中
-    bgmResult: 0.4, // 結果画面
-
+    bgmHome: 0.4,
+    bgmGame: 0.4,
+    bgmResult: 0.4,
     // SE
     seJump: 0.7,
-    seGameover: 0.8
+    seGameover: 0.8,
   };
 
   const CANVAS_SCALE = 0.85;
@@ -49,6 +48,7 @@ window.addEventListener("DOMContentLoaded", () => {
   // サーバー API エンドポイント
   const POOP_API_SCORE = "/api/poop-score";
   const POOP_API_RANKING = "/api/poop-ranking";
+  const PROFILE_API = "/api/profile";
 
   // ---------- canvas ----------
   const canvas = document.getElementById("gameCanvas");
@@ -123,7 +123,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const seJump = document.getElementById("se-jump");
   const seGameover = document.getElementById("se-gameover");
 
-  // ★初期ボリューム設定
+  // 初期ボリューム設定
   if (bgmHome) bgmHome.volume = VOLUME.bgmHome;
   if (bgmGame) bgmGame.volume = VOLUME.bgmGame;
   if (bgmResult) bgmResult.volume = VOLUME.bgmResult;
@@ -216,21 +216,21 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ====== サーバー通信（世界ランキング） ======
+  // ====== サーバー通信 ======
 
   async function sendScoreToServer(run, playerName) {
     try {
+      const payload = {
+        score: run.score,
+        rank: run.rank,
+        label: run.label,
+        name: playerName,
+      };
+
       await fetch(POOP_API_SCORE, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          score: run.score,
-          rank: run.rank,
-          label: run.label,
-          name: playerName,
-          // ここで avatar も一緒に送る
-          avatarDataUrl: profile.avatarDataUrl || null
-        })
+        body: JSON.stringify(payload),
       });
     } catch (err) {
       console.error("Failed to send score:", err);
@@ -246,6 +246,35 @@ window.addEventListener("DOMContentLoaded", () => {
     } catch (err) {
       console.error("Failed to fetch leaderboard:", err);
       return loadBestRuns().slice(0, BEST_RUNS_LIMIT);
+    }
+  }
+
+  // プロフィール（名前＋アバター）をサーバーに送信
+  async function syncProfileToServer() {
+    const name =
+      typeof profile?.name === "string" ? profile.name.trim() : "";
+    if (!name) return;
+
+    try {
+      const payload = {
+        name,
+        avatarDataUrl: profile.avatarDataUrl || null,
+      };
+
+      const res = await fetch(PROFILE_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        console.error("Profile sync failed:", res.status);
+        if (res.status === 413) {
+          alert("Avatar image is too large. Please choose a smaller one.");
+        }
+      }
+    } catch (err) {
+      console.error("Failed to sync profile:", err);
     }
   }
 
@@ -294,7 +323,7 @@ window.addEventListener("DOMContentLoaded", () => {
       jumpPower: BASE_JUMP_POWER,
       maxJumps: 3,
       jumpCount: 0,
-      onGround: true
+      onGround: true,
     };
   }
 
@@ -305,7 +334,7 @@ window.addEventListener("DOMContentLoaded", () => {
       x: player.x + (player.width - w) / 2,
       y: player.y + (player.height - h) / 2,
       width: w,
-      height: h
+      height: h,
     };
   }
 
@@ -446,7 +475,7 @@ window.addEventListener("DOMContentLoaded", () => {
       height,
       speed,
       phase: Math.random() * Math.PI * 2,
-      amplitude
+      amplitude,
     });
     resetFireTimer();
   }
@@ -471,7 +500,7 @@ window.addEventListener("DOMContentLoaded", () => {
       width: size,
       height: size,
       speed: 200 * 0.8,
-      isBonus: ground.bonus
+      isBonus: ground.bonus,
     });
 
     resetPoopTimer();
@@ -486,7 +515,7 @@ window.addEventListener("DOMContentLoaded", () => {
         x: rand(0, canvas.width),
         y: rand(0, canvas.height),
         length: len,
-        speed: rand(300, 600)
+        speed: rand(300, 600),
       });
     }
   }
@@ -538,7 +567,7 @@ window.addEventListener("DOMContentLoaded", () => {
         vy: vyBase,
         life: 0,
         maxLife: rand(0.25, 0.45),
-        size: rand(2, 4)
+        size: rand(2, 4),
       });
     }
   }
@@ -647,37 +676,38 @@ window.addEventListener("DOMContentLoaded", () => {
 
         const isSelf = rawName === currentName;
 
-        // サーバーから avatar が来ていればそれを使う
-        let avatarUrl =
-          typeof r.avatarDataUrl === "string" && r.avatarDataUrl
-            ? r.avatarDataUrl
-            : null;
-
-        // 古いデータなどで avatar が無くて、自分の行ならローカルのを使う
-        if (!avatarUrl && isSelf && profile.avatarDataUrl) {
-          avatarUrl = profile.avatarDataUrl;
-        }
+        const serverAvatar = r.avatarDataUrl;
+        const localAvatar = profile.avatarDataUrl;
 
         let avatarHtml = '<div class="best-avatar"></div>';
-        if (avatarUrl) {
+
+        if (serverAvatar) {
+          // サーバーから来たアバター（全員分）
           avatarHtml = `
             <div class="best-avatar has-image">
-              <img class="best-avatar-img" src="${avatarUrl}" alt="avatar" />
+              <img class="best-avatar-img" src="${serverAvatar}" alt="avatar" />
+            </div>
+          `;
+        } else if (isSelf && localAvatar) {
+          // サーバーにまだない場合の保険として、自分だけローカル表示
+          avatarHtml = `
+            <div class="best-avatar has-image">
+              <img class="best-avatar-img" src="${localAvatar}" alt="avatar" />
             </div>
           `;
         }
 
         return `
-        <li class="best-item">
-          <span class="best-rank-badge">#${i + 1}</span>
-          ${avatarHtml}
-          <div class="best-name">${displayName}</div>
-          <div class="best-score-wrap">
-            <span class="best-score">${displayScore}</span>
-            <span class="best-rank-text">${displayRank}</span>
-          </div>
-        </li>
-      `;
+          <li class="best-item">
+            <span class="best-rank-badge">#${i + 1}</span>
+            ${avatarHtml}
+            <div class="best-name">${displayName}</div>
+            <div class="best-score-wrap">
+              <span class="best-score">${displayScore}</span>
+              <span class="best-rank-text">${displayRank}</span>
+            </div>
+          </li>
+        `;
       })
       .join("");
   }
@@ -697,7 +727,7 @@ window.addEventListener("DOMContentLoaded", () => {
       "#ffd740",
       "#69f0ae",
       "#40c4ff",
-      "#e040fb"
+      "#e040fb",
     ];
     for (let i = 0; i < count; i++) {
       const div = document.createElement("div");
@@ -847,7 +877,7 @@ window.addEventListener("DOMContentLoaded", () => {
           x: f.x + w / 2,
           y: f.y + h / 2,
           width: f.width - w,
-          height: f.height - h
+          height: f.height - h,
         };
 
         if (rectOverlap(hit, fb)) return endGame();
@@ -1111,6 +1141,35 @@ window.addEventListener("DOMContentLoaded", () => {
     stopCamera();
   }
 
+  // ファイルから選んだ画像も 256x256 にリサイズして保存
+  function handleAvatarFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 256;
+        const canvasCap = document.createElement("canvas");
+        canvasCap.width = size;
+        canvasCap.height = size;
+        const ctxCap = canvasCap.getContext("2d");
+
+        const w = img.width;
+        const h = img.height;
+        const minSide = Math.min(w, h);
+        const sx = (w - minSide) / 2;
+        const sy = (h - minSide) / 2;
+
+        ctxCap.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+
+        const dataUrl = canvasCap.toDataURL("image/png");
+        profile.avatarDataUrl = dataUrl;
+        renderAvatarPreview();
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
   // ---------- view switch ----------
   startBtn.addEventListener("click", () => {
     showOnlyView(viewGame);
@@ -1144,11 +1203,14 @@ window.addEventListener("DOMContentLoaded", () => {
   settingsBtn.addEventListener("click", openSettings);
   settingsCancelBtn.addEventListener("click", closeSettings);
 
-  settingsSaveBtn.addEventListener("click", () => {
+  settingsSaveBtn.addEventListener("click", async () => {
     const name = settingNameInput.value.trim();
     profile.name = name || "Player";
     saveProfile(profile);
-    renderAvatarPreview();
+
+    // プロフィールをサーバーにも反映
+    await syncProfileToServer();
+
     closeSettings();
   });
 
@@ -1159,13 +1221,7 @@ window.addEventListener("DOMContentLoaded", () => {
   avatarFileInput.addEventListener("change", () => {
     const file = avatarFileInput.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      profile.avatarDataUrl = reader.result;
-      saveProfile(profile);
-      renderAvatarPreview();
-    };
-    reader.readAsDataURL(file);
+    handleAvatarFile(file);
   });
 
   avatarCameraBtn.addEventListener("click", () => {
