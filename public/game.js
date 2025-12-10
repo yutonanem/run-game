@@ -19,6 +19,17 @@ window.addEventListener("DOMContentLoaded", () => {
   const ENABLE_BGM = true;
   const ENABLE_SE = true;
 
+  const VOLUME = {
+    // BGM
+    bgmHome: 0.40,   // タイトル
+    bgmGame: 0.40,   // プレイ中（ちょい元気）
+    bgmResult: 0.40, // 結果画面（少し落ち着き）
+
+    // SE
+    seJump: 0.70,
+    seGameover: 0.80
+  };
+
   const CANVAS_SCALE = 0.85;
 
   const BG_FAR_SPEED = TERRAIN_BASE_SPEED * 0.15;
@@ -111,6 +122,13 @@ window.addEventListener("DOMContentLoaded", () => {
   const bgmResult = document.getElementById("bgm-result");
   const seJump = document.getElementById("se-jump");
   const seGameover = document.getElementById("se-gameover");
+
+  // ★ここから追加：初期ボリュームを設定
+  if (bgmHome)   bgmHome.volume   = VOLUME.bgmHome;
+  if (bgmGame)   bgmGame.volume   = VOLUME.bgmGame;
+  if (bgmResult) bgmResult.volume = VOLUME.bgmResult;
+  if (seJump)    seJump.volume    = VOLUME.seJump;
+  if (seGameover) seGameover.volume = VOLUME.seGameover;
 
   function playAudio(a, type) {
     if (!a) return;
