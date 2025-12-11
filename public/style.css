@@ -7,6 +7,8 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
+  /* 常にスクロールバーを消す（ゲームが画面に収まる想定） */
+  overflow: hidden;
 }
 
 /* PC / スマホ共通：軽い背景 */
@@ -19,14 +21,14 @@ body {
 
 /* ルート */
 .app-root {
-  min-height: 100vh;
+  height: 100%;
   display: flex;
   justify-content: center;
   align-items: stretch;
   padding: 12px;
 }
 
-/* 共通ビュー枠 */
+/* 共通ビュー枠（スタート画面用） */
 .view {
   width: 100%;
   max-width: 1080px;
@@ -139,18 +141,46 @@ body {
 
 /* ===== ゲーム画面 ===== */
 
-.view-game {
-  background: linear-gradient(#ffd9e6, #ffc1e3);
+/* ゲーム画面がアクティブのときはフルスクリーンにする */
+.view-game.active {
+  position: fixed;
+  inset: 0;
+  max-width: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: #8fd4ff; /* 空色背景でキャンバスとなじませる */
 }
 
-.game-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px 4px;
+.view-game .game-main {
+  padding: 0;
+  height: 100%;
 }
 
-/* 戻るボタン */
+.view-game .game-frame {
+  height: 100%;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.canvas-shell {
+  position: relative;
+  width: 100%;
+  height: 100vh; /* 画面いっぱい */
+  border-radius: 0;
+  overflow: hidden;
+  background: linear-gradient(#8fd4ff, #bfe8ff);
+}
+
+/* キャンバス自体（中身） */
+#gameCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Back ボタンをキャンバスの上に重ねる */
 .back-link {
   border: none;
   background: rgba(255, 255, 255, 0.95);
@@ -168,42 +198,16 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
-.game-main {
-  padding: 0 14px 16px;
-}
-
-.game-frame {
-  background: rgba(255, 255, 255, 0.96);
-  border-radius: 24px;
-  padding: 14px 14px 18px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.15);
-}
-
-/* キャンバス外枠（角丸の空色部分） */
-.canvas-shell {
-  border-radius: 22px;
-  overflow: hidden;
-  background: linear-gradient(#8fd4ff, #bfe8ff);
-  position: relative;
-}
-
-/* キャンバス自体（中身） */
-#gameCanvas {
-  display: block;
-  width: 100%;
-  height: min(60vh, 420px);
+.back-overlay {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  z-index: 20;
 }
 
 /* 下部情報行（今は未使用） */
 .hud-row.bottom-info {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 6px;
-  font-size: 12px;
-}
-
-.bottom-text {
-  min-width: 0;
+  display: none;
 }
 
 /* ===== 画面中央メッセージ ===== */
@@ -216,6 +220,7 @@ body {
   justify-content: center;
   text-align: center;
   pointer-events: none;
+  z-index: 10;
 }
 
 .center-message.hidden {
@@ -235,21 +240,37 @@ body {
 
 /* ===== 結果画面 ===== */
 
+/* ★ここから：結果画面だけは外枠カードを使わず、フルスクリーン表示にする */
 .view-result {
-  background: #ffffff;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  max-width: none;
 }
 
+/* active のときはゲーム画面と同様に全画面に固定 */
+.view-result.active {
+  position: fixed;
+  inset: 0;
+  display: flex;             /* ヘッダー＋メインを縦並び */
+  flex-direction: column;
+}
+
+/* ヘッダーは上に固定されているイメージで少し余白だけ */
 .result-header {
   padding: 12px 20px 4px;
 }
 
+/* メイン部で中央のカードを画面中央に配置 */
 .result-main {
-  padding: 24px 16px 36px;
+  flex: 1;
+  padding: 16px 16px 24px;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
 }
 
+/* ランキング全体の白いカード（ここだけ四角く囲む） */
 .result-frame {
   width: 100%;
   max-width: 900px;
@@ -274,7 +295,7 @@ body {
   font-size: 1.2em;
 }
 
-/* 真ん中の白いカード */
+/* 真ん中の白い小カード（名前＋WORLD RANKING） */
 .result-panel {
   width: min(520px, 100%);
   margin: 0 auto 26px;
@@ -299,16 +320,20 @@ body {
 /* ベストラン部分 */
 .result-best-title {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 900;
   margin: 8px 0 6px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #ffb300; /* 金色っぽく目立たせる */
 }
 
+/* ランキングリスト（上位3件だけ） */
 .result-best-list {
   list-style: none;
   padding: 0;
   margin: 0;
   max-height: 260px;
-  overflow-y: auto;
+  overflow: hidden; /* 4位以下は JS 側で出さないが念のため */
 }
 
 /* ランキング1行 */
@@ -395,7 +420,7 @@ body {
 /* 左上ステータス（うんこ数） */
 .top-left-status {
   position: absolute;
-  top: 10px;
+  top: 40px;   /* Back ボタンの少し下に表示 */
   left: 14px;
   padding: 0;
   border-radius: 0;
@@ -404,6 +429,7 @@ body {
   font-size: 26px;
   font-weight: 900;
   letter-spacing: 0.08em;
+  z-index: 10;
 }
 
 /* 結果カードのポップアニメーション */
@@ -583,31 +609,8 @@ body {
     border-radius: 0;
   }
 
-  .game-frame {
-    border-radius: 0;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-  }
-
-  #gameCanvas {
-    height: min(56vh, 360px);
-  }
-
-  .top-left-status {
-    font-size: 18px;
-  }
-
-  .stage-card {
-    padding: 24px 18px 30px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-  }
-
-  .select-desc {
-    font-size: 18px;
-  }
-
-  .select-hero-img {
-    width: 40vw;
-    max-width: 220px;
+  .result-main {
+    padding: 12px 8px 16px;
   }
 
   .result-panel {
@@ -617,5 +620,26 @@ body {
 
   .primary-btn {
     width: 80%;
+  }
+
+  .top-left-status {
+    font-size: 18px;
+  }
+}
+
+/* うんち取得時：左上Poops表示をポンっと弾ませる */
+.top-left-status.hud-pop {
+  animation: hud-pop 0.18s ease-out;
+}
+
+@keyframes hud-pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
   }
 }

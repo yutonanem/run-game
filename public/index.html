@@ -34,30 +34,25 @@
         </main>
       </div>
 
-      <!-- ===== Game view ===== -->
+      <!-- ===== Game view (フルスクリーン) ===== -->
       <div id="view-game" class="view view-game">
-        <header class="game-header">
-          <button id="back-to-select" class="back-link">← Back</button>
-        </header>
-
         <main class="game-main">
           <div class="game-frame">
             <div class="canvas-shell">
+              <!-- キャンバスに重ねる Back ボタン -->
+              <button id="back-to-select" class="back-link back-overlay">
+                ← Back
+              </button>
+
               <canvas id="gameCanvas"></canvas>
 
               <!-- center message -->
               <div id="center-message" class="center-message hidden"></div>
 
-              <!-- top-left status -->
+              <!-- top-left status（Back の下に来るように CSS で位置調整） -->
               <div id="top-left-status" class="top-left-status">
                 Poops: 0
               </div>
-            </div>
-
-            <div class="hud-row bottom-info">
-              <div id="bottom-left" class="bottom-text"></div>
-              <div id="bottom-center" class="bottom-text"></div>
-              <div id="bottom-right" class="bottom-text"></div>
             </div>
           </div>
         </main>
@@ -81,7 +76,9 @@
                 Poops collected: 0
               </p>
 
-              <h3 class="result-best-title">Best Runs</h3>
+              <h3 id="result-best-title" class="result-best-title">
+                WORLD RANKING
+              </h3>
               <ul id="result-best-list" class="result-best-list">
                 <!-- JSで中身を生成 -->
               </ul>
@@ -116,16 +113,7 @@
         <div class="modal-field">
           <span class="modal-label">Country</span>
           <select id="setting-country">
-            <option value="">Select your country</option>
-            <option value="Japan">Japan</option>
-            <option value="USA">USA</option>
-            <option value="UK">UK</option>
-            <option value="Korea">Korea</option>
-            <option value="China">China</option>
-            <option value="Germany">Germany</option>
-            <option value="France">France</option>
-            <option value="Brazil">Brazil</option>
-            <option value="Other">Other</option>
+            <!-- options are populated by game.js -->
           </select>
         </div>
 
@@ -151,6 +139,8 @@
 
     <audio id="se-jump" src="se_jump.mp3" preload="auto"></audio>
     <audio id="se-gameover" src="se_gameover.mp3" preload="auto"></audio>
+    <!-- 画面反転 SE -->
+    <audio id="se-reverse" src="se_reverse.mp3" preload="auto"></audio>
 
     <!-- game script -->
     <script src="./game.js"></script>

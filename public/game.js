@@ -22,13 +22,14 @@ window.addEventListener("DOMContentLoaded", () => {
   // 音量設定
   const VOLUME = {
     // BGM
-    bgmHome: 0.4,   // タイトル
-    bgmGame: 0.4,   // プレイ中
+    bgmHome: 0.4, // タイトル
+    bgmGame: 0.4, // プレイ中
     bgmResult: 0.4, // 結果画面
 
     // SE
     seJump: 0.7,
-    seGameover: 0.8
+    seGameover: 0.8,
+    seReverse: 0.9
   };
 
   const CANVAS_SCALE = 0.85;
@@ -47,6 +48,68 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const PROFILE_KEY = "poopRunnerProfileV2"; // V2: name + country だけ
 
+  // 偽うんち・デバフ関連
+  const FAKE_DEBUFF_DURATION = 2.5; // 偽うんち効果の継続秒数
+  const FAKE_POOP_PROB = 0.2; // 偽うんち出現確率（20%）
+
+  // リバースアイテム関連
+  const REVERSE_ITEM_PROB = 0.15; // うんちとは別に一定確率で流す
+  const REVERSE_DURATION = 5.0; // 逆さま時間
+  const REVERSE_FLASH_TIME = 0.18; // 白フラッシュの時間
+
+  // 地面を少し上げるオフセット（px）
+  const GROUND_OFFSET = 60;
+
+  // 主要な国リスト（value = 表示名）
+  const COUNTRY_LIST = [
+    "Japan",
+    "United States",
+    "United Kingdom",
+    "Canada",
+    "Australia",
+    "New Zealand",
+
+    "China",
+    "Korea",
+    "Taiwan",
+    "Hong Kong",
+    "Singapore",
+    "Thailand",
+    "Vietnam",
+    "Philippines",
+    "Indonesia",
+    "Malaysia",
+    "India",
+
+    "Germany",
+    "France",
+    "Italy",
+    "Spain",
+    "Netherlands",
+    "Sweden",
+    "Norway",
+    "Finland",
+    "Denmark",
+    "Poland",
+    "Russia",
+
+    "Brazil",
+    "Mexico",
+    "Argentina",
+    "Chile",
+    "Colombia",
+
+    "Turkey",
+    "Israel",
+    "Saudi Arabia",
+    "United Arab Emirates",
+    "Egypt",
+    "South Africa",
+    "Nigeria",
+
+    "Other"
+  ];
+
   // サーバー API エンドポイント
   const POOP_API_SCORE = "/api/poop-score";
   const POOP_API_RANKING = "/api/poop-ranking";
@@ -64,7 +127,7 @@ window.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("resize", resizeCanvas);
 
   function getGroundY() {
-    return canvas.height - 12;
+    return canvas.height - 12 - GROUND_OFFSET;
   }
 
   // ---------- UI ----------
@@ -114,6 +177,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const bgmResult = document.getElementById("bgm-result");
   const seJump = document.getElementById("se-jump");
   const seGameover = document.getElementById("se-gameover");
+  const seReverse = document.getElementById("se-reverse");
 
   // 初期ボリューム
   if (bgmHome) bgmHome.volume = VOLUME.bgmHome;
@@ -121,6 +185,7 @@ window.addEventListener("DOMContentLoaded", () => {
   if (bgmResult) bgmResult.volume = VOLUME.bgmResult;
   if (seJump) seJump.volume = VOLUME.seJump;
   if (seGameover) seGameover.volume = VOLUME.seGameover;
+  if (seReverse) seReverse.volume = VOLUME.seReverse;
 
   function playAudio(a, type) {
     if (!a) return;
@@ -221,6 +286,80 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // ---------- state ----------
+  let player;
+  let fireballs = [];
+  let poopItems = []; // 通常 / 偽 / リバースの3種類を含む
+  let terrain = [];
+
+  let poopCount = 0;
+
+  let gameStarted = false;
+  let gameOver = false;
+
+  let startTime = 0;
+  let elapsedTime = 0;
+
+  let currentGapProb = BASE_GAP_PROB;
+
+  let spawnFireTimer = 0;
+  let nextFireInterval = 0;
+
+  let spawnPoopTimer = 0;
+  let nextPoopInterval = 0;
+
+  let bgFarOffset = 0;
+  let bgNearOffset = 0;
+
+  let speedLines = [];
+  let particles = [];
+
+  // 偽うんちの画面デバフ用
+  let fakeDebuffTimer = 0;
+
+  // リバース状態
+  // phase: "off" | "flashIn" | "active" | "flashOut"
+  let reversePhase = "off";
+  let reverseTimer = 0; // active の残り時間
+  let reverseFlashTimer = 0; // flash の残り時間
+
+  // うんち取得時のフローティングテキスト
+  let floatingTexts = [];
+
+  let profile = loadProfile() || { name: "Player", country: "" };
+
+  // 国セレクトボックスの初期化
+  function initCountryOptions() {
+    if (!settingCountrySelect) return;
+
+    // 一旦クリア
+    settingCountrySelect.innerHTML = "";
+
+    // プレースホルダー
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select your country";
+    settingCountrySelect.appendChild(placeholder);
+
+    // 定義済みリストから追加
+    COUNTRY_LIST.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      settingCountrySelect.appendChild(opt);
+    });
+
+    // 既に保存されている国がリスト外だった場合も選択できるようにする
+    if (profile?.country && !COUNTRY_LIST.includes(profile.country)) {
+      const opt = document.createElement("option");
+      opt.value = profile.country;
+      opt.textContent = profile.country;
+      settingCountrySelect.appendChild(opt);
+    }
+  }
+
+  initCountryOptions();
+
   // ====== サーバー通信（世界ランキング） ======
 
   async function sendScoreToServer(run, displayName) {
@@ -251,36 +390,6 @@ window.addEventListener("DOMContentLoaded", () => {
       return loadBestRuns().slice(0, BEST_RUNS_LIMIT);
     }
   }
-
-  // ---------- state ----------
-  let player;
-  let fireballs = [];
-  let poopItems = [];
-  let terrain = [];
-
-  let poopCount = 0;
-
-  let gameStarted = false;
-  let gameOver = false;
-
-  let startTime = 0;
-  let elapsedTime = 0;
-
-  let currentGapProb = BASE_GAP_PROB;
-
-  let spawnFireTimer = 0;
-  let nextFireInterval = 0;
-
-  let spawnPoopTimer = 0;
-  let nextPoopInterval = 0;
-
-  let bgFarOffset = 0;
-  let bgNearOffset = 0;
-
-  let speedLines = [];
-  let particles = [];
-
-  let profile = loadProfile() || { name: "Player", country: "" };
 
   // ---------- player ----------
   function initPlayer() {
@@ -453,19 +562,27 @@ window.addEventListener("DOMContentLoaded", () => {
     resetFireTimer();
   }
 
-  // ---------- poops ----------
+  // ---------- poops & reverse items ----------
   function resetPoopTimer() {
     nextPoopInterval = rand(1500, 2600);
     spawnPoopTimer = 0;
   }
 
-  function spawnPoop() {
+  function spawnPoopOrReverse() {
     if (poopItems.length >= MAX_POOP) return;
 
     const size = player.height * 1.0;
     const spawnX = canvas.width + 20;
-
     const ground = getGroundInfoAtX(spawnX);
+
+    // ベースは「通常うんち」または「偽うんち」
+    const isFake = Math.random() < FAKE_POOP_PROB;
+    let isReverse = false;
+
+    // 別枠でリバースアイテムを稀に出す
+    if (Math.random() < REVERSE_ITEM_PROB) {
+      isReverse = true;
+    }
 
     poopItems.push({
       x: spawnX,
@@ -473,7 +590,9 @@ window.addEventListener("DOMContentLoaded", () => {
       width: size,
       height: size,
       speed: 200 * 0.8,
-      isBonus: ground.bonus
+      isBonus: ground.bonus,
+      isFake,
+      isReverse
     });
 
     resetPoopTimer();
@@ -540,7 +659,8 @@ window.addEventListener("DOMContentLoaded", () => {
         vy: vyBase,
         life: 0,
         maxLife: rand(0.25, 0.45),
-        size: rand(2, 4)
+        size: rand(2, 4),
+        bad: false
       });
     }
   }
@@ -561,8 +681,72 @@ window.addEventListener("DOMContentLoaded", () => {
     particles.forEach((p) => {
       const alpha = 1 - p.life / p.maxLife;
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      if (p.bad) {
+        ctx.fillStyle = "rgba(120,80,0,0.9)";
+      } else {
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+      }
       ctx.fillRect(p.x, p.y, p.size, p.size);
+    });
+    ctx.restore();
+  }
+
+  // ---------- poop collect effect ----------
+  function spawnPoopCollectEffect(x, y, addScore) {
+    const count = 7;
+    for (let i = 0; i < count; i++) {
+      if (particles.length >= MAX_PARTICLES) break;
+      particles.push({
+        x: x + rand(-5, 5),
+        y: y + rand(-5, 5),
+        vx: rand(-60, 60),
+        vy: rand(-120, -40),
+        life: 0,
+        maxLife: rand(0.25, 0.4),
+        size: rand(2, 4),
+        bad: false
+      });
+    }
+
+    floatingTexts.push({
+      x,
+      y,
+      text: `+${addScore}`,
+      life: 0,
+      maxLife: 0.6
+    });
+
+    if (topLeftStatusEl) {
+      topLeftStatusEl.classList.remove("hud-pop");
+      void topLeftStatusEl.offsetWidth;
+      topLeftStatusEl.classList.add("hud-pop");
+    }
+  }
+
+  function updateFloatingTexts(delta) {
+    floatingTexts.forEach((f) => {
+      f.life += delta;
+      f.y -= 40 * delta;
+    });
+    floatingTexts = floatingTexts.filter((f) => f.life < f.maxLife);
+  }
+
+  function drawFloatingTexts() {
+    if (!floatingTexts.length) return;
+    ctx.save();
+    ctx.font = `${Math.max(16, canvas.height * 0.035)}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    floatingTexts.forEach((f) => {
+      const t = f.life / f.maxLife;
+      const alpha = 1 - t;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "#ffffff";
+      ctx.strokeStyle = "rgba(0,0,0,0.6)";
+      ctx.lineWidth = 3;
+      ctx.strokeText(f.text, f.x, f.y);
+      ctx.fillText(f.text, f.x, f.y);
     });
     ctx.restore();
   }
@@ -640,9 +824,11 @@ window.addEventListener("DOMContentLoaded", () => {
     const nameFallback = "Anonymous";
     const myDisplayName = getDisplayNameFromProfile(profile);
 
-    resultBestListEl.innerHTML = topRuns
+    const sliced = topRuns.slice(0, 3);
+
+    resultBestListEl.innerHTML = sliced
       .map((r, i) => {
-        const rawName = r.name || nameFallback; // ここに "yuto#Japan" が入ってる
+        const rawName = r.name || nameFallback;
         const displayName = escapeHtml(rawName);
         const displayScore = r.score ?? 0;
         const displayRank = r.rank || "?";
@@ -715,6 +901,7 @@ window.addEventListener("DOMContentLoaded", () => {
     poopItems = [];
     particles = [];
     speedLines = [];
+    floatingTexts = [];
     poopCount = 0;
 
     gameStarted = false;
@@ -725,6 +912,11 @@ window.addEventListener("DOMContentLoaded", () => {
 
     bgFarOffset = 0;
     bgNearOffset = 0;
+
+    fakeDebuffTimer = 0;
+    reversePhase = "off";
+    reverseTimer = 0;
+    reverseFlashTimer = 0;
 
     resetFireTimer();
     resetPoopTimer();
@@ -764,6 +956,36 @@ window.addEventListener("DOMContentLoaded", () => {
   canvas.addEventListener("pointerdown", jump);
 
   // ---------- update ----------
+  function updateReverseState(delta) {
+    if (reversePhase === "flashIn" || reversePhase === "flashOut") {
+      reverseFlashTimer = Math.max(0, reverseFlashTimer - delta);
+      if (reverseFlashTimer <= 0) {
+        if (reversePhase === "flashIn") {
+          // フラッシュ終了 → 画面反転スタート
+          reversePhase = "active";
+          reverseTimer = REVERSE_DURATION;
+          showMessage("Everything feels upside down...");
+          setTimeout(() => {
+            if (!gameOver && reversePhase === "active") {
+              showMessage("");
+            }
+          }, 800);
+        } else if (reversePhase === "flashOut") {
+          // フラッシュ終了 → 完全終了
+          reversePhase = "off";
+        }
+      }
+    } else if (reversePhase === "active") {
+      reverseTimer = Math.max(0, reverseTimer - delta);
+      if (reverseTimer <= 0) {
+        // 反転終了 → 戻る前のフラッシュ
+        reversePhase = "flashOut";
+        reverseFlashTimer = REVERSE_FLASH_TIME;
+        playAudio(seReverse, "se");
+      }
+    }
+  }
+
   function update(delta) {
     if (!gameStarted || gameOver) return;
 
@@ -776,6 +998,12 @@ window.addEventListener("DOMContentLoaded", () => {
     updateBackground(delta);
     updateSpeedLines(delta);
     updateParticles(delta);
+    updateFloatingTexts(delta);
+    updateReverseState(delta);
+
+    if (fakeDebuffTimer > 0) {
+      fakeDebuffTimer = Math.max(0, fakeDebuffTimer - delta);
+    }
 
     if (player) {
       const wasOnGround = player.onGround;
@@ -805,7 +1033,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (spawnFireTimer >= nextFireInterval) spawnFireball();
 
     spawnPoopTimer += delta * 1000;
-    if (spawnPoopTimer >= nextPoopInterval) spawnPoop();
+    if (spawnPoopTimer >= nextPoopInterval) spawnPoopOrReverse();
 
     fireballs.forEach((f) => {
       f.x -= f.speed * delta;
@@ -820,6 +1048,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (player) {
       const hit = getPlayerHitbox();
 
+      // ファイアボール衝突
       for (const f of fireballs) {
         const w = f.width * 0.45;
         const h = f.height * 0.45;
@@ -834,15 +1063,55 @@ window.addEventListener("DOMContentLoaded", () => {
         if (rectOverlap(hit, fb)) return endGame();
       }
 
+      // Poop / 偽うんち / リバース衝突
       for (let i = poopItems.length - 1; i >= 0; i--) {
         if (rectOverlap(hit, poopItems[i])) {
           const item = poopItems[i];
           poopItems.splice(i, 1);
 
-          const add = item.isBonus ? 2 : 1;
-          poopCount += add;
+          const cx = item.x + item.width / 2;
+          const cy = item.y + item.height / 2;
 
-          topLeftStatusEl.textContent = `Poops: ${poopCount}`;
+          if (item.isReverse) {
+            // すでにリバース中なら無視（延長しない）
+            if (reversePhase === "off") {
+              reversePhase = "flashIn";
+              reverseFlashTimer = REVERSE_FLASH_TIME;
+              playAudio(seReverse, "se");
+            }
+          } else if (item.isFake) {
+            // 偽うんち：スコアは増えず画面デバフ
+            fakeDebuffTimer = FAKE_DEBUFF_DURATION;
+
+            for (let j = 0; j < 10; j++) {
+              if (particles.length >= MAX_PARTICLES) break;
+              particles.push({
+                x: cx,
+                y: cy,
+                vx: rand(-80, 80),
+                vy: rand(-40, -10),
+                life: 0,
+                maxLife: rand(0.3, 0.5),
+                size: rand(3, 5),
+                bad: true
+              });
+            }
+
+            showMessage("Eww... That was a fake poop!");
+            setTimeout(() => {
+              if (!gameOver && fakeDebuffTimer > 0) {
+                showMessage("");
+              }
+            }, 600);
+          } else {
+            // 通常 / ボーナスうんち
+            const add = item.isBonus ? 2 : 1;
+            poopCount += add;
+
+            topLeftStatusEl.textContent = `Poops: ${poopCount}`;
+
+            spawnPoopCollectEffect(cx, cy, add);
+          }
         }
       }
     }
@@ -853,6 +1122,15 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // ---------- draw ----------
   function draw() {
+    ctx.save();
+
+    const isReversed = reversePhase === "active";
+
+    if (isReversed) {
+      ctx.translate(0, canvas.height);
+      ctx.scale(1, -1);
+    }
+
     drawBackgroundLayers();
 
     const baseY = getGroundY();
@@ -895,9 +1173,54 @@ window.addEventListener("DOMContentLoaded", () => {
       ctx.fillRect(x1, baseY, x2 - x1, canvas.height - baseY);
     }
 
+    // Poop / 偽うんち / リバースアイテム
     poopItems.forEach((p) => {
-      if (poopImg.complete && poopImg.naturalWidth > 0) {
-        ctx.drawImage(poopImg, p.x, p.y, p.width, p.height);
+      const cx = p.x + p.width / 2;
+      const cy = p.y + p.height / 2;
+
+      if (p.isReverse) {
+        // リバースアイテム：白い丸に↻マーク
+        const radius = (p.width * 0.6) / 2;
+        ctx.save();
+        ctx.beginPath();
+        ctx.fillStyle = "#ffffff";
+        ctx.shadowColor = "rgba(0,0,0,0.25)";
+        ctx.shadowBlur = 8;
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.strokeStyle = "#333";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * 0.6, Math.PI * 0.1, Math.PI * 1.7);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(cx + radius * 0.55, cy - radius * 0.1);
+        ctx.lineTo(cx + radius * 0.9, cy - radius * 0.25);
+        ctx.lineTo(cx + radius * 0.6, cy - radius * 0.4);
+        ctx.closePath();
+        ctx.fillStyle = "#333";
+        ctx.fill();
+
+        ctx.restore();
+      } else if (p.isFake) {
+        // 偽うんち：紫の丸だけ
+        const radius = (p.width * 0.7) / 2;
+        ctx.save();
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(150, 80, 200, 0.9)";
+        ctx.shadowColor = "rgba(80,0,120,0.5)";
+        ctx.shadowBlur = 10;
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else {
+        // 通常うんち：従来どおり画像
+        if (poopImg.complete && poopImg.naturalWidth > 0) {
+          ctx.drawImage(poopImg, p.x, p.y, p.width, p.height);
+        }
       }
     });
 
@@ -909,10 +1232,44 @@ window.addEventListener("DOMContentLoaded", () => {
 
     drawParticles();
     drawSpeedLines();
+    drawFloatingTexts();
 
     if (player && playerImg.complete && playerImg.naturalWidth > 0) {
       ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
     }
+
+    // 偽うんちデバフ：画面をほとんど見えなくするオーバーレイ
+    if (fakeDebuffTimer > 0) {
+      const t = fakeDebuffTimer / FAKE_DEBUFF_DURATION;
+      ctx.save();
+
+      ctx.globalAlpha = 0.8 * t;
+      ctx.fillStyle = "rgba(70, 40, 0, 0.98)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.globalAlpha = 0.18 * t;
+      ctx.fillStyle = "#ffffff";
+      const lineCount = 20;
+      for (let i = 0; i < lineCount; i++) {
+        const y = rand(0, canvas.height);
+        const h = rand(2, 5);
+        ctx.fillRect(0, y, canvas.width, h);
+      }
+
+      ctx.restore();
+    }
+
+    // リバースの白フラッシュ（反転の前後）
+    if (reversePhase === "flashIn" || reversePhase === "flashOut") {
+      const t = clamp(reverseFlashTimer / REVERSE_FLASH_TIME, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = t;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+
+    ctx.restore(); // 反転解除
   }
 
   // ---------- loop ----------
