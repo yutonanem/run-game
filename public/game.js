@@ -8,7 +8,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const MAX_FIREBALLS = 2;
   const MAX_POOP = 6;
 
-  const TERRAIN_BASE_SPEED = 140;
+  const TERRAIN_BASE_SPEED = 170;
 
   const BASE_GAP_PROB = 0.3;
   const MAX_EXTRA_GAP_PROB = 0.3;
@@ -22,14 +22,14 @@ window.addEventListener("DOMContentLoaded", () => {
   // 音量設定
   const VOLUME = {
     // BGM
-    bgmHome: 0.4, // タイトル
-    bgmGame: 0.4, // プレイ中
-    bgmResult: 0.4, // 結果画面
+    bgmHome: 0.15, // タイトル
+    bgmGame: 0.15, // プレイ中
+    bgmResult: 0.15, // 結果画面
 
     // SE
-    seJump: 0.7,
-    seGameover: 0.8,
-    seReverse: 0.9
+    seJump: 0.5,
+    seGameover: 0.5,
+    seReverse: 0.5
   };
 
   const CANVAS_SCALE = 0.85;
@@ -53,9 +53,9 @@ window.addEventListener("DOMContentLoaded", () => {
   const FAKE_POOP_PROB = 0.2; // 偽うんち出現確率（20%）
 
   // リバースアイテム関連
-  const REVERSE_ITEM_PROB = 0.15; // うんちとは別に一定確率で流す
+  const REVERSE_ITEM_PROB = 0.20; // うんちとは別に一定確率で流す
   const REVERSE_DURATION = 5.0; // 逆さま時間
-  const REVERSE_FLASH_TIME = 0.18; // 白フラッシュの時間
+  const REVERSE_FLASH_TIME = 0.20; // 白フラッシュの時間
 
   // 地面を少し上げるオフセット（px）
   const GROUND_OFFSET = 60;
@@ -546,7 +546,7 @@ window.addEventListener("DOMContentLoaded", () => {
       baseY -= base * 1.2;
     }
 
-    const speed = rand(220, 300) * 0.9;
+    const speed = rand(250, 330) 
     const amplitude = height * FIRE_SWAY_AMPLITUDE_RATIO;
 
     fireballs.push({
@@ -1131,16 +1131,66 @@ window.addEventListener("DOMContentLoaded", () => {
       ctx.scale(1, -1);
     }
 
+    // 背景（空・山・ビル）
     drawBackgroundLayers();
 
+    // ===== 地面の描画 =====
     const baseY = getGroundY();
 
-    const grad = ctx.createLinearGradient(0, baseY - 40, 0, canvas.height);
+    // 地面の色（以前のグラデーションをそのまま利用）
+    const groundTop = baseY - 40;
+    const grad = ctx.createLinearGradient(0, groundTop, 0, canvas.height);
     grad.addColorStop(0, "#ffe0b2");
     grad.addColorStop(1, "#ffb74d");
     ctx.fillStyle = grad;
-    ctx.fillRect(0, baseY - 40, canvas.width, canvas.height - (baseY - 40));
 
+    // ★ 非ギャップ部分だけをポリゴンで埋める
+    let active = false;
+    let startX = 0;
+    let lastX = 0;
+
+    for (const seg of terrain) {
+      if (seg.type === "gap") {
+        // 穴に入ったタイミングで、今のポリゴンを閉じて塗る
+        if (active) {
+          ctx.lineTo(lastX, canvas.height);
+          ctx.lineTo(startX, canvas.height);
+          ctx.closePath();
+          ctx.fill();
+          active = false;
+        }
+        continue;
+      }
+
+      const x1 = seg.x;
+      const x2 = seg.x + seg.width;
+      const y1 = baseY + seg.startOffset;
+      const y2 = baseY + seg.endOffset;
+
+      if (!active) {
+        // 新しい地面ブロック開始
+        startX = x1;
+        ctx.beginPath();
+        ctx.moveTo(x1, canvas.height);
+        ctx.lineTo(x1, y1);
+        active = true;
+      } else {
+        // 途中から続く地面
+        ctx.lineTo(x1, y1);
+      }
+      ctx.lineTo(x2, y2);
+      lastX = x2;
+    }
+
+    // 最後まで地面が続いていた場合のクローズ
+    if (active) {
+      ctx.lineTo(lastX, canvas.height);
+      ctx.lineTo(startX, canvas.height);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // 地面の「線」だけは今までどおり描く
     ctx.lineWidth = 2;
     ctx.strokeStyle = "#666";
     ctx.beginPath();
@@ -1165,13 +1215,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     ctx.stroke();
 
-    ctx.fillStyle = "rgba(0,0,0,0.15)";
-    for (const seg of terrain) {
-      if (seg.type !== "gap") continue;
-      const x1 = seg.x;
-      const x2 = seg.x + seg.width;
-      ctx.fillRect(x1, baseY, x2 - x1, canvas.height - baseY);
-    }
+    // ※ ここにあった「落とし穴の黒い影」は削除しました
 
     // Poop / 偽うんち / リバースアイテム
     poopItems.forEach((p) => {
